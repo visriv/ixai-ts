@@ -1,0 +1,51 @@
+dataset:
+  name: var
+  num_series: 4        # D
+  seq_len: 200         # T
+  coeff_scale: 0.4     # default
+  noise: 0.1           # default
+
+model:
+  name: tcn
+  hidden: 64
+  layers: 2
+
+training:
+  batch_size: 32
+  epochs: 25
+
+experiment:
+  tau_max: 50
+  num_permutations: 50   # default
+
+# 🔑 Sweep definitions for different experiments
+sweeps:
+  VAR-1:                     # Baseline
+    coeff_scale: [0.4]
+    noise: [0.1]
+    num_permutations: [50]
+
+  VAR-2:                     # Stability wrt permutations
+    num_permutations: [20, 50, 100, 200]
+
+  VAR-3:                     # Effect of noise
+    noise: [0.05, 0.1, 0.2, 0.4]
+
+  VAR-4:                     # Effect of coefficient scale
+    coeff_scale: [0.2, 0.4, 0.8]
+
+  VAR-5:                     # Model comparison
+    model.name: [tcn, lstm, transformer]
+
+  VAR-6:                     # Explainer comparison (will hook later)
+    explainer: [sti, deeplift, winit, timex]
+
+  VAR-7:                     # Fourier analysis
+    coeff_scale: [0.4]
+    noise: [0.1]
+    num_permutations: [50]
+
+  VAR-8:                     # Probabilistic vs STI
+    coeff_scale: [0.4]
+    noise: [0.1]
+    num_permutations: [50]
