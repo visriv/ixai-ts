@@ -38,7 +38,10 @@ python scripts/compute_metrics.py --config config/var.yaml --ckpt runs/<exp_fold
 ```bash
 python scripts/run_experiments.py --config config/var.yaml --base_outdir runs
 ```
-
+or (new)
+```bash
+ python scripts/pipeline.py --config config/var.yaml 
+```
 This will train models, compute STI metrics, and aggregate results into `runs/all_metrics.csv`.
 
 ## ⚙️ Config (`config/var.yaml`)
