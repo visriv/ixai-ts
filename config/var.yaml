@@ -44,8 +44,8 @@ sweeps:
   VAR-5:                     # Model comparison
     model.name: [tcn, lstm, transformer]
 
-  VAR-6:                     # Explainer comparison (will hook later)
-    explainer: [sti, deeplift, winit, timex]
+  # VAR-6:                     # Explainer comparison (will hook later)
+  #   explainer: [sti, deeplift, winit, timex]
 
   # VAR-7:                     # Fourier analysis
   #   coeff_scale: [0.4]

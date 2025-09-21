@@ -139,7 +139,7 @@ def shapley_taylor_pairwise(
 
     for t in tqdm(range(T), desc="STI lags", leave=True):
         max_tau = min(tau_max, T - 1 - t)
-        for tau in tqdm(range(max_tau + 1), desc=f"tau loop (t={t})", leave=False):
+        for tau in range(max_tau + 1):
             t2 = t + tau
             for d in range(D):
                 neigh = neighborhoods.get(d, [d])
