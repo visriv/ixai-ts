@@ -1,8 +1,7 @@
 import numpy as np
 
-import numpy as np
 
-def generate_var(num_samples=100, num_series=5, seq_len=200,
+def generate_var(num_samples=1000, num_series=3, seq_len=100,
                  coeff_scale=0.5, noise=0.1, label_rule="last", **kwargs):
     """
     Generate N samples of VAR sequences, each shape (T, D).

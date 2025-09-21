@@ -111,6 +111,8 @@ def run_metrics(cfg, base_outdir):
     # --- Fits and plots ---
     exp_p1, pow_p1 = fit_decay(curve1)
     exp_p2, pow_p2 = fit_decay(curve2)
+    a, b = exp_p1.mean(axis=0)
+    c, p = pow_p1.mean(axis=0)
     plot_locality(curve1, out / "locality1.png", fits={"exp": exp_p1, "pow": pow_p1}, mode='all')
     plot_locality(curve2, out / "locality2.png", fits={"exp": exp_p2, "pow": pow_p2}, mode='all')
 
@@ -127,8 +129,8 @@ def run_metrics(cfg, base_outdir):
     np.save(out / "locality_curve2.npy", curve2)
 
     summary = {
-        "exp_fit": {"a": float(exp_p1[0]), "b": float(exp_p1[1])},
-        "power_fit": {"a": float(pow_p1[0]), "p": float(pow_p1[1])},
+        "exp_fit": {"a": float(a), "b": float(b)},
+        "power_fit": {"a": float(c), "p": float(p)},
         "half_range": int(hr1),
         "loc_at_10": float(lock1),
         "bandwidth95": int(B1),
@@ -138,6 +140,16 @@ def run_metrics(cfg, base_outdir):
     with open(out / "metrics1.json", "w") as f:
         json.dump(summary, f, indent=2)
     print(f"✅ Saved metrics to {out / 'metrics1.json'}")
+
+
+def to_scalar(x, idx=None):
+    arr = np.array(x).ravel()   # flatten everything
+    if idx is not None:
+        return float(arr[idx])
+    if arr.size == 1:
+        return float(arr[0])
+    raise ValueError(f"Expected scalar, got array of size {arr.size}")
+
 
 
 # -------------------------------

@@ -172,7 +172,7 @@ def shapley_taylor_pairwise(
                         divs.append(diffs)
 
                     # median over permutations, preserving [N]
-                    print(np.mean(np.array(divs)))
+                    # print(np.mean(np.array(divs)))
                     divs = np.stack(divs, axis=0)  # [K,N]
                     interactions[(t, d, d2, tau)] = np.mean(divs, axis=0)  # [N]
 

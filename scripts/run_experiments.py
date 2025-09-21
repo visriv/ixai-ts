@@ -25,7 +25,7 @@ def run_all(cfg_path, base_outdir):
     subprocess.check_call(
         ["python", "scripts/compute_metrics.py", "--config", cfg_path, "--base_outdir", base_outdir],
         env=env
-    )
+        )
 
     # --- Aggregate metrics into a single CSV ---
     outdir = Path(base_outdir)

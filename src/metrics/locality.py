@@ -43,17 +43,22 @@ def half_range(curve):
     """
     Half-range per sample: smallest τ where cumulative mass >= 0.5.
     Args:
-      curve: np.ndarray[tau_max+1, N]
+      curve: np.ndarray of shape [tau_max+1] or [tau_max+1, N]
     Returns:
-      np.ndarray[N]
+      np.ndarray[N] if multi-sample, or scalar np.ndarray[1] if single curve
     """
-    N = curve.shape[1]
+    arr = np.array(curve)
+    if arr.ndim == 1:
+        arr = arr[:, None]  # -> [T, 1]
+
+    T, N = arr.shape
     res = []
     for n in range(N):
-        s = curve[:, n].sum() + 1e-12
-        cs = np.cumsum(curve[:, n]) / s
+        s = arr[:, n].sum() + 1e-12
+        cs = np.cumsum(arr[:, n]) / s
         res.append(int(np.searchsorted(cs, 0.5)))
     return np.array(res)
+
 
 def loc_at_k(curve, K):
     """

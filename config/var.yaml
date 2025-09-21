@@ -1,7 +1,14 @@
+# in config/var.yaml
+data_gen: true
+train: true
+compute_metrics: true
+
+
 dataset:
   name: var
-  num_series: 4        # D
-  seq_len: 200         # T
+  num_samples: 1000
+  num_series: 3        # D
+  seq_len: 100         # T
   coeff_scale: 0.4     # default
   noise: 0.1           # default
 
@@ -12,21 +19,21 @@ model:
 
 training:
   batch_size: 32
-  epochs: 25
+  epochs: 100
 
 experiment:
-  tau_max: 50
-  num_permutations: 50   # default
+  tau_max: 10
+  num_permutations: 20   # default
 
 # 🔑 Sweep definitions for different experiments
 sweeps:
   VAR-1:                     # Baseline
     coeff_scale: [0.4]
     noise: [0.1]
-    num_permutations: [50]
+    num_permutations: [20]
 
   VAR-2:                     # Stability wrt permutations
-    num_permutations: [20, 50, 100, 200]
+    num_permutations: [5, 10, 20, 50]
 
   VAR-3:                     # Effect of noise
     noise: [0.05, 0.1, 0.2, 0.4]
@@ -40,12 +47,12 @@ sweeps:
   VAR-6:                     # Explainer comparison (will hook later)
     explainer: [sti, deeplift, winit, timex]
 
-  VAR-7:                     # Fourier analysis
-    coeff_scale: [0.4]
-    noise: [0.1]
-    num_permutations: [50]
+  # VAR-7:                     # Fourier analysis
+  #   coeff_scale: [0.4]
+  #   noise: [0.1]
+  #   num_permutations: [20]
 
-  VAR-8:                     # Probabilistic vs STI
-    coeff_scale: [0.4]
-    noise: [0.1]
-    num_permutations: [50]
+  # VAR-8:                     # Probabilistic vs STI
+  #   coeff_scale: [0.4]
+  #   noise: [0.1]
+  #   num_permutations: [20]
