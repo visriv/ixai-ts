@@ -24,21 +24,8 @@ ixai-ts/
 
 ## 🚀 Usage
 
-### 1. Train a Model
-```bash
-python scripts/train_model.py --config config/var.yaml --base_outdir runs
-```
+### 1. Run All Experiments
 
-### 2. Compute Metrics & Plots
-```bash
-python scripts/compute_metrics.py --config config/var.yaml --ckpt runs/<exp_folder>/model.pt --base_outdir runs
-```
-
-### 3. Run All Experiments
-```bash
-python scripts/run_experiments.py --config config/var.yaml --base_outdir runs
-```
-or (new)
 ```bash
  python scripts/pipeline.py --config config/var.yaml 
 ```
