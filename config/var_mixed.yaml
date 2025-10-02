@@ -1,0 +1,18 @@
+dataset:
+  name: VAR_MIXED
+  seq_len: 300
+  noise: 0.1
+  D: 5
+
+model:
+  name: TCN
+  kernel_size: 3
+  layers: 2
+
+training:
+  epochs: 3
+  batch_size: 32
+
+experiment:
+  tau_max: 50
+  num_permutations: 50

@@ -62,19 +62,23 @@ def half_range(curve):
 
 def loc_at_k(curve, K):
     """
-    Locality-at-K per sample.
-    Args:
-      curve: np.ndarray[tau_max+1, N]
-      K: int
-    Returns:
-      np.ndarray[N]
+    Loc@K: Fraction of interaction mass within first K lags.
+    curve: [tau_max+1]  (aggregated interaction values per lag)
     """
-    N = curve.shape[1]
-    res = []
-    for n in range(N):
-        s = curve[:, n].sum() + 1e-12
-        res.append(float(curve[:K+1, n].sum() / s))
-    return np.array(res)
+    num = curve[:K+1].sum()
+    denom = curve.sum() + 1e-12
+    return float(num / denom)
+
+
+def loc_at_50(curve):
+    """
+    Loc@50: Lag cutoff containing 50% of interaction mass.
+    curve: [tau_max+1]
+    """
+    total = curve.sum() + 1e-12
+    cs = np.cumsum(curve) / total
+    tau50 = int(np.searchsorted(cs, 0.5))
+    return tau50
 
 
 def fit_decay(curve):

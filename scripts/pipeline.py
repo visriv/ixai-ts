@@ -20,7 +20,7 @@ from src.models.lstm import LSTMClassifier
 from src.models.transformer import TransformerClassifier
 from src.models.utils import make_loader, train_classifier
 from src.explainers.sti import shapley_taylor_pairwise
-from src.metrics.locality import aggregate_lag_curve, fit_decay, half_range, loc_at_k
+from src.metrics.locality import aggregate_lag_curve, fit_decay, half_range, loc_at_k, loc_at_50
 from src.metrics.spectral import dft_magnitude, spectral_bandwidth, spectral_centroid, spectral_flatness
 from src.utils.plotting import plot_locality, plot_spectrum
 
@@ -250,8 +250,18 @@ def run_metrics(cfg, base_outdir):
         baseline="mean", out_dir=out, device=device,
     )
 
-    curves1 = aggregate_lag_curve(lag_mean, tau_max=int(cfg['experiment']['tau_max']))
+    curves1 = aggregate_lag_curve(lag_mean, 
+                                  tau_max=int(cfg['experiment']['tau_max']),
+                                   reduce="mean")
     
+    
+    K = min(10, len(curves1)-1)
+    locK = loc_at_k(curves1, K)
+    loc50 = loc_at_50(curves1)
+
+    print(f"Loc@{K}: {locK:.4f}")
+    print(f"Loc@50: {loc50}")
+
     agg1, curves1 = maybe_stack_curves(curves1)
 
     exp_p1, pow_p1 = fit_decay(np.array(curves1))
