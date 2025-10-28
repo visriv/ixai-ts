@@ -4,7 +4,7 @@ Interaction based eXplainable AI for Time Series (ixai-ts).
 
 This repository contains code for:
 - Synthetic dataset generation (VAR, ARFIMA, Lorenz, etc.)
-- Training baseline models (TCN, LSTM, Transformer) on synthetic time series
+- Training baseline models (TCN, LSTM, Transformer) on synthetic time series (classification and regression)
 - Computing interaction-based explanations using **Shapley–Taylor Interaction (STI)**
 - Metrics and plots for locality of interaction strength and its spectrum
 - Experiment sweeps defined in config/var.yaml
