@@ -21,6 +21,8 @@ training:
   batch_size: 32
   epochs: 100
 
+evals:
+  loc@k: 5
 experiment:
   tau_max: 10
   num_permutations: 20   # default

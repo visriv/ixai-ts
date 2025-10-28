@@ -70,13 +70,25 @@ def loc_at_k(curve, K):
     return float(num / denom)
 
 
+import numpy as np
+
 def loc_at_50(curve):
     """
     Loc@50: Lag cutoff containing 50% of interaction mass.
-    curve: [tau_max+1]
+    curve: [N, tau] interaction curves (per sample).
+           If already [tau], works as well.
+    Returns: int (the τ cutoff).
     """
-    total = curve.sum() + 1e-12
-    cs = np.cumsum(curve) / total
+    arr = np.array(curve)
+    # print(arr.shape)
+    if arr.ndim == 2:   # [tau, N]
+        agg_curve = arr.mean(axis=1)   # average across samples
+    else:               # [tau]
+        agg_curve = arr
+
+    total = agg_curve.sum() + 1e-12
+    cs = np.cumsum(agg_curve) / total
+    # print(cs)
     tau50 = int(np.searchsorted(cs, 0.5))
     return tau50
 

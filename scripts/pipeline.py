@@ -214,10 +214,11 @@ def maybe_stack_curves(curve):
 
 def run_metrics(cfg, base_outdir):
     out = make_outdir(base_outdir, cfg, nested=True)
+    # print(out)
     metrics_file = out / "metrics1.json"
-    if metrics_file.exists():
-        banner(f"Skipping metrics — already exists: {metrics_file}")
-        return
+    # if metrics_file.exists():
+    #     banner(f"Skipping metrics — already exists: {metrics_file}")
+    #     return
 
     out.mkdir(parents=True, exist_ok=True)
     ckpt_path = out / "model.pt"
@@ -255,7 +256,7 @@ def run_metrics(cfg, base_outdir):
                                    reduce="mean")
     
     
-    K = min(10, len(curves1)-1)
+    K = min(cfg["evals"]["loc@k"], len(curves1)-1)
     locK = loc_at_k(curves1, K)
     loc50 = loc_at_50(curves1)
 
@@ -273,7 +274,8 @@ def run_metrics(cfg, base_outdir):
         "exp_fit": {"a": float(exp_mean[0]), "b": float(exp_mean[1])},
         "power_fit": {"a": float(pow_mean[0]), "p": float(pow_mean[1])},
         "half_range": int(half_range(agg1)),
-        # "loc_at_10": float(loc_at_k(curve1, K=min(10, len(curve1)-1))),
+        "loc_at_k": locK,
+        "loc50": loc50,
         "bandwidth95": int(spectral_bandwidth(mag1, 0.95)),
         "spec_centroid": float(spectral_centroid(mag1)),
         "spec_flatness": float(spectral_flatness(mag1)),
