@@ -6,7 +6,7 @@ This repository contains code for:
 - Synthetic dataset generation (VAR, ARFIMA, Lorenz, etc.)
 - Training baseline models (TCN, LSTM, Transformer) on synthetic time series
 - Computing interaction-based explanations using **Shapley–Taylor Interaction (STI)**
-- Metrics and plots for locality, spectrum, and probabilistic baselines
+- Metrics and plots for locality of interaction strength and its spectrum
 - Experiment sweeps defined in config/var.yaml
 
 ## 📂 Project Structure
@@ -16,9 +16,7 @@ ixai-ts/
 ├── data/              # Generated synthetic datasets (train/val)
 ├── runs/              # Outputs: models, metrics, plots
 ├── scripts/           # Main entry scripts
-│   ├── train_model.py
-│   ├── compute_metrics.py
-│   └── run_experiments.py
+│   ├── pipeline.py
 └── src/               # Source code (datasets, models, explainers, metrics, utils)
 ```
 
