@@ -24,6 +24,9 @@ from src.metrics.locality import aggregate_lag_curve, fit_decay, half_range, loc
 from src.metrics.spectral import dft_magnitude, spectral_bandwidth, spectral_centroid, spectral_flatness
 from src.utils.plotting import plot_locality, plot_spectrum
 
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
 
 # ---------------------------------
 # Pretty printing
@@ -312,35 +315,80 @@ def aggregate_all_metrics(base_outdir):
         banner("⚠️ No metrics files found to aggregate.")
 
 
-# ---------------------------------
-# Main
-# ---------------------------------
-def main(cfg_path, base_outdir):
+# ------------------------------
+# Multi-GPU scheduling
+# ------------------------------
+def _run_one(i, total, this_cfg, base_outdir, gpu_id, flags):
+    """
+    Worker that runs one expanded config on a single GPU (or CPU if gpu_id is None).
+    We pin the process with CUDA_VISIBLE_DEVICES so downstream code can just use 'cuda'.
+    """
+    if gpu_id is not None:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        which = f"GPU {gpu_id}"
+    else:
+        os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+        which = "CPU"
+
+    banner(f"[{which}] Sweep {i+1}/{total}")
+
+    if flags["data_gen"]:
+        X, y, A, ds_name = load_dataset(this_cfg["dataset"])
+        save_train_val_pickles(X, y, ds_name)
+        print(f"📦 Data generated for {ds_name}")
+
+    if flags["train"]:
+        run_training(this_cfg, base_outdir)
+
+    if flags["metrics"]:
+        run_metrics(this_cfg, base_outdir)
+
+    return i
+
+def main(cfg_path, base_outdir, gpus_arg="0,1,2,3", max_workers=None):
     cfg = load_config(cfg_path)
     all_cfgs = expand_cfg(cfg)
 
-    data_gen_flag = bool(cfg.get("data_gen", False))
-    train_flag = bool(cfg.get("train", True))
-    metrics_flag = bool(cfg.get("compute_metrics", True))
+    flags = {
+        "data_gen": bool(cfg.get("data_gen", False)),
+        "train": bool(cfg.get("train", True)),
+        "metrics": bool(cfg.get("compute_metrics", True)),
+    }
 
+    # Parse list of GPUs (e.g., "0,1,2,3"); allow empty to force CPU
+    gpus_arg = (gpus_arg or "").strip()
+    gpu_ids = [int(x) for x in gpus_arg.split(",") if x != ""] if gpus_arg else []
+
+    if max_workers is None:
+        max_workers = max(1, len(gpu_ids)) if gpu_ids else mp.cpu_count()
+
+    # Round-robin assignment of configs to GPUs
+    assignments = []
     for i, this_cfg in enumerate(all_cfgs):
-        banner(f"Running sweep {i+1}/{len(all_cfgs)} → {this_cfg}")
-        if data_gen_flag:
-            X, y, A, ds_name = load_dataset(this_cfg["dataset"])
-            save_train_val_pickles(X, y, ds_name)
-            print(f"📦 Data generated for {ds_name}")
-        if train_flag:
-            run_training(this_cfg, base_outdir)
-        if metrics_flag:
-            run_metrics(this_cfg, base_outdir)
+        gpu = None if not gpu_ids else gpu_ids[i % len(gpu_ids)]
+        assignments.append((i, this_cfg, gpu))
 
-    if metrics_flag:
+    # Use 'spawn' to be CUDA-safe in subprocesses
+    ctx = mp.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=max_workers, mp_context=ctx) as ex:
+        futures = []
+        for i, this_cfg, gpu in assignments:
+            futures.append(ex.submit(_run_one, i, len(all_cfgs), this_cfg, base_outdir, gpu, flags))
+        # Raise early if any worker fails
+        for f in as_completed(futures):
+            _ = f.result()
+
+    if flags["metrics"]:
         aggregate_all_metrics(base_outdir)
-
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--base_outdir", default="runs")
+    ap.add_argument("--gpus", default="0,1,2,3",
+                    help="Comma-separated physical GPU IDs (e.g., '0,1,2,3'). Empty string for CPU.")
+    ap.add_argument("--max_workers", type=int, default=None,
+                    help="#processes. Default: one per GPU; CPU=logical cores.")
     args = ap.parse_args()
-    main(args.config, args.base_outdir)
+    main(args.config, args.base_outdir, gpus_arg=args.gpus, max_workers=args.max_workers)
+

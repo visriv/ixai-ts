@@ -1,18 +1,47 @@
+# in config/var.yaml
+data_gen: true
+train: true
+compute_metrics: true
+
 dataset:
-  name: VAR_LOCAL
-  seq_len: 300
-  noise: 0.1
-  D: 5
+  name: var_local
+  num_samples: 400
+  num_series: 3        # D
+  seq_len: 50         # T
+  a1: 0.8     # default
+  noise: 0.1           # default
+
 
 model:
-  name: TCN
-  kernel_size: 3
+  name: transformer
+  d_model: 64
   layers: 2
 
 training:
-  epochs: 3
   batch_size: 32
+  epochs: 100
 
 experiment:
-  tau_max: 50
-  num_permutations: 50
+  tau_max: 25
+  num_permutations: 20
+
+evals:
+  loc@k: 5
+
+sweeps:
+  VAR-1:                     # Baseline
+    a1: [0.8]
+    noise: [0.1]
+    num_permutations: [20]
+
+  VAR-2:                     # Stability wrt permutations
+    model.d_model: [16, 32, 64, 128]
+
+  VAR-3:                     # Effect of noise
+    noise: [0.05, 0.1, 0.2, 0.4]
+
+  VAR-4:                     # Effect of a1 scale
+    a1: [0.05, 0.1, 0.2, 0.4, 0.8]
+
+  VAR-5:                     # Model comparison
+    model.name: [tcn, lstm, transformer]
