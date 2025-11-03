@@ -44,4 +44,8 @@ sweeps:
     a1: [0.05, 0.1, 0.2, 0.4, 0.8]
 
   VAR-5:                     # Model comparison
-    model.name: [tcn, lstm, transformer]
+    model.name: [
+                #  tcn,
+                #  lstm, 
+                 transformer
+                 ]

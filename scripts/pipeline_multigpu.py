@@ -149,6 +149,8 @@ def select_model(cfg_model, D, C):
 
 def run_training(cfg, base_outdir):
     out = make_outdir(base_outdir, cfg, nested=True)
+    print(out)
+    
     ckpt = out / "model.pt"
     if ckpt.exists():
         banner(f"Skipping training — already exists: {ckpt}")

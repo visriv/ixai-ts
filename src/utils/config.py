@@ -17,7 +17,7 @@ def make_outdir(base_outdir, cfg, nested=True):
     ds_tag  = f"n{cfg['dataset'].get('num_samples','NA')}_s{cfg['dataset'].get('num_series','NA')}_L{cfg['dataset'].get('seq_len','NA')}"
 
     # Model
-    model_name = cfg['model']['name']
+    model_name = cfg['model']['name'] + '_d_model' + str(cfg["model"].get("d_model", "")) + '_layers' + str(cfg["model"].get("layers", ""))
     model_tag  = "_".join([f"{k}{v}" for k,v in cfg['model'].items() if k != "name"])
 
     # Training

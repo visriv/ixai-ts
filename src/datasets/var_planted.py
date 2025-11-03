@@ -1,20 +1,20 @@
 import numpy as np
 
-def generate_var(A_list, seq_len=200, noise=0.1):
-    """
-    Generate VAR data given coefficient matrices A_list.
-    A_list: list of numpy arrays [A^(1), A^(2), ..., A^(p)] each shape (D, D).
-    seq_len: length of time series
-    """
-    p = len(A_list)
-    D = A_list[0].shape[0]
-    X = np.zeros((seq_len, D))
-    for t in range(p, seq_len):
-        acc = np.zeros(D)
-        for k, A in enumerate(A_list, start=1):
-            acc += A @ X[t-k]
-        X[t] = acc + noise * np.random.randn(D)
-    return X
+# def generate_var(A_list, seq_len=200, noise=0.1):
+#     """
+#     Generate VAR data given coefficient matrices A_list.
+#     A_list: list of numpy arrays [A^(1), A^(2), ..., A^(p)] each shape (D, D).
+#     seq_len: length of time series
+#     """
+#     p = len(A_list)
+#     D = A_list[0].shape[0]
+#     X = np.zeros((seq_len, D))
+#     for t in range(p, seq_len):
+#         acc = np.zeros(D)
+#         for k, A in enumerate(A_list, start=1):
+#             acc += A @ X[t-k]
+#         X[t] = acc + noise * np.random.randn(D)
+#     return X
 
 
 import numpy as np
