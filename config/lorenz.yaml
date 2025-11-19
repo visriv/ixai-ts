@@ -1,0 +1,70 @@
+# configs/datasets/lorenz.yaml
+
+data_gen: true
+train: true
+compute_metrics: true
+
+dataset:
+  name: lorenz
+  multi_label: True
+  # how many trajectories
+  num_samples: 400        # mirror VAR default so runs are comparable
+
+  # time-series length AFTER burn-in
+  seq_len: 50
+
+  # integration step for Lorenz ODE
+  dt: 0.01
+
+  # standard Lorenz parameters
+  sigma: 10.0
+  beta: 2.6666666667      # 8/3
+
+  # classification over discrete rho regimes
+  rho_values: [20.0, 28.0]   # two classes; index 0 -> 20.0, 1 -> 28.0
+  task: classification
+
+  # how long to run before recording (gets you onto attractor)
+  # burn_in: 50
+
+  # optional observation noise
+  noise: 0.05
+
+
+model:
+  name: transformer
+  d_model: 64
+  layers: 2
+
+
+training:
+  batch_size: 32
+  epochs: 100
+
+
+experiment:
+  tau_max: 25
+  num_permutations: 20
+
+
+evals:
+  loc@k: 5
+
+
+sweeps:
+  LOR-1:                     # Baseline
+    noise: [0.05]
+    num_permutations: [20]
+
+  LOR-2:                     # Effect of model width
+    model.d_model: [16, 32, 64, 128]
+
+  LOR-3:                     # Effect of noise on trajectories
+    noise: [0.0, 0.02, 0.05, 0.1]
+
+  LOR-4:                     # Model comparison
+    model.name: [
+      # tcn,
+      # lstm,
+      transformer
+    ]

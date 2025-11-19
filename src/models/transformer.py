@@ -21,10 +21,10 @@ class TransformerClassifier(nn.Module):
         enc_layer = nn.TransformerEncoderLayer(d_model, nhead, dim_ff, batch_first=True)
         self.enc = nn.TransformerEncoder(enc_layer, layers)
         self.fc = nn.Linear(d_model, C)
-    def forward(self, X):  # [B, T, D]
-        z = self.inp(X)
-        z = self.pe(z)
-        h = self.enc(z)
-        g = h.mean(dim=1)
-        return self.fc(g)
+    def forward(self, X):  # X: [B, T, D]
+        z = self.inp(X)          # [B, T, d_model]
+        z = self.pe(z)           # [B, T, d_model]
+        h = self.enc(z)          # [B, T, d_model]
+        logits = self.fc(h)      # [B, T, C]  <-- per-timestep logits
+        return logits
 

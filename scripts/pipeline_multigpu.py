@@ -43,7 +43,7 @@ def banner(msg: str):
 def expand_cfg(cfg):
     """Expand config into a list of configs if any param is a list; else [cfg]."""
     sweep_keys, sweep_vals = [], []
-    for section in ["dataset", "model", "training", "experiment"]:
+    for section in ["model", "training", "experiment"]:
         if section not in cfg:
             continue
         for k, v in cfg[section].items():
@@ -95,8 +95,7 @@ def load_dataset(ds_cfg):
         A = None
     elif name == "lorenz":
         from src.datasets.lorenz import generate_lorenz
-        X, y = generate_lorenz(**params)
-        A = None
+        X, y, A = generate_lorenz(**params)
     else:
         raise ValueError(f"Unknown dataset: {name}")
     return X, y, A, name

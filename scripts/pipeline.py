@@ -40,7 +40,7 @@ def banner(msg: str):
 def expand_cfg(cfg):
     """Expand config into a list of configs if any param is a list; else [cfg]."""
     sweep_keys, sweep_vals = [], []
-    for section in ["dataset", "model", "training", "experiment"]:
+    for section in ["model", "training", "experiment"]:
         if section not in cfg:
             continue
         for k, v in cfg[section].items():
@@ -92,8 +92,7 @@ def load_dataset(ds_cfg):
         A = None
     elif name == "lorenz":
         from src.datasets.lorenz import generate_lorenz
-        X, y = generate_lorenz(**params)
-        A = None
+        X, y, A = generate_lorenz(**params)
     else:
         raise ValueError(f"Unknown dataset: {name}")
     return X, y, A, name
@@ -165,7 +164,13 @@ def run_training(cfg, base_outdir):
     print(f"Train size: {len(y_train)} | Class balance: {class_stats(y_train)}")
     print(f"Val size:   {len(y_val)}   | Class balance: {class_stats(y_val)}")
 
-    D, C = X_train.shape[2], len(np.unique(np.concatenate([y_train, y_val])))
+    D, _ = X_train.shape[2], len(np.unique(np.concatenate([y_train, y_val])))
+    if False:
+        # cfg["dataset"]["multi_label"]:
+        C = y_train.shape[1]
+    else:
+        C = len(np.unique(y_train))
+
     model = select_model(cfg["model"], D, C)
 
     train_loader = make_loader(X_train, y_train, batch=cfg["training"]["batch_size"], shuffle=True)
@@ -200,6 +205,7 @@ def compute_and_cache_lag_dicts(model, X_tensor, neighborhoods, tau_max, K, base
         neighborhoods=neighborhoods, K=K, baseline=baseline,
         cond_imputer=None, device=device,
     )
+    # lag_dict_mean, lag_dict_median = aggregate_lag_dict(ih_lag_dict)
     with open(lag_path_mean, "wb") as f: pickle.dump(lag_dict_mean, f)
     with open(lag_path_median, "wb") as f: pickle.dump(lag_dict_median, f)
     print(f"✅ Computed and saved lag_dicts to {out_dir}")
