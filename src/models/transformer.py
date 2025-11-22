@@ -14,17 +14,21 @@ class PosEnc(nn.Module):
         return x + self.pe[:, :x.size(1), :]
 
 class TransformerClassifier(nn.Module):
-    def __init__(self, D, C, d_model=64, nhead=4, layers=2, dim_ff=128):
+    def __init__(self, D, C, d_model=64, nhead=4, layers=2, dim_ff=128, all_times=False):
         super().__init__()
         self.inp = nn.Linear(D, d_model)
         self.pe = PosEnc(d_model)
         enc_layer = nn.TransformerEncoderLayer(d_model, nhead, dim_ff, batch_first=True)
         self.enc = nn.TransformerEncoder(enc_layer, layers)
         self.fc = nn.Linear(d_model, C)
+        self.all_times = all_times
+
     def forward(self, X):  # X: [B, T, D]
         z = self.inp(X)          # [B, T, d_model]
         z = self.pe(z)           # [B, T, d_model]
         h = self.enc(z)          # [B, T, d_model]
-        logits = self.fc(h)      # [B, T, C]  <-- per-timestep logits
-        return logits
+        if not self.all_times:
+            h = h.mean(dim=1)     # [B, d_model]  <-- use aggregate over timestep
+        
+        return self.fc(h) # [B, T or 1, C]  <-- per-timestep logits
 

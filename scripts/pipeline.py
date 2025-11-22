@@ -20,6 +20,7 @@ from src.models.lstm import LSTMClassifier
 from src.models.transformer import TransformerClassifier
 from src.models.utils import make_loader, train_classifier
 from src.explainers.sti import shapley_taylor_pairwise
+from src.explainers.ih import ih_main
 from src.metrics.locality import aggregate_lag_curve, fit_decay, half_range, loc_at_k, loc_at_50
 from src.metrics.spectral import dft_magnitude, spectral_bandwidth, spectral_centroid, spectral_flatness
 from src.utils.plotting import plot_locality, plot_spectrum
@@ -133,14 +134,14 @@ def class_stats(y):
 # ---------------------------------
 # Training
 # ---------------------------------
-def select_model(cfg_model, D, C):
+def select_model(cfg_model, D, C, all_times=False):
     name = str(cfg_model["name"]).lower()
     if name == "tcn":
         return TCNClassifier(D, C, hidden=int(cfg_model.get("hidden", 64)), layers=int(cfg_model.get("layers", 2)))
     elif name == "lstm":
         return LSTMClassifier(D, C, hidden=int(cfg_model.get("hidden", 64)))
     else:
-        return TransformerClassifier(D, C, d_model=int(cfg_model.get("d_model", 64)))
+        return TransformerClassifier(D, C, d_model=int(cfg_model.get("d_model", 64)), all_times=all_times)
 
 
 def run_training(cfg, base_outdir):
@@ -165,13 +166,13 @@ def run_training(cfg, base_outdir):
     print(f"Val size:   {len(y_val)}   | Class balance: {class_stats(y_val)}")
 
     D, _ = X_train.shape[2], len(np.unique(np.concatenate([y_train, y_val])))
-    if False:
+    if cfg["dataset"]["all_times"]:
         # cfg["dataset"]["multi_label"]:
         C = y_train.shape[1]
     else:
         C = len(np.unique(y_train))
 
-    model = select_model(cfg["model"], D, C)
+    model = select_model(cfg["model"], D, C, cfg["dataset"]["all_times"])
 
     train_loader = make_loader(X_train, y_train, batch=cfg["training"]["batch_size"], shuffle=True)
     val_loader = make_loader(X_val, y_val, batch=cfg["training"]["batch_size"], shuffle=False)
@@ -205,7 +206,13 @@ def compute_and_cache_lag_dicts(model, X_tensor, neighborhoods, tau_max, K, base
         neighborhoods=neighborhoods, K=K, baseline=baseline,
         cond_imputer=None, device=device,
     )
-    # lag_dict_mean, lag_dict_median = aggregate_lag_dict(ih_lag_dict)
+
+    # lag_dict_mean, lag_dict_median = ih_main(
+    #     model=model, x=X_tensor, baseline = np.zeros((1,T,D)), m_steps=50, target_idx=0
+    #     ) 
+    
+
+
     with open(lag_path_mean, "wb") as f: pickle.dump(lag_dict_mean, f)
     with open(lag_path_median, "wb") as f: pickle.dump(lag_dict_median, f)
     print(f"✅ Computed and saved lag_dicts to {out_dir}")

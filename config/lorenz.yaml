@@ -6,7 +6,7 @@ compute_metrics: true
 
 dataset:
   name: lorenz
-  multi_label: True
+  all_times: True
   # how many trajectories
   num_samples: 400        # mirror VAR default so runs are comparable
 

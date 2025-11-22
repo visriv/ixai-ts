@@ -186,7 +186,7 @@ def integrated_hessians_timeseries(
 # ------------------------------
 # Same aggregation we already use
 # ------------------------------
-def ih_aggregate(
+def ih_main(
     model: torch.nn.Module,
     x: torch.Tensor,                   # [B, T, D]
     baseline: torch.Tensor,            # [1, T, D] or [B, T, D]

@@ -5,6 +5,8 @@ compute_metrics: true
 
 dataset:
   name: var_local
+  all_times: False
+
   num_samples: 400
   num_series: 3        # D
   seq_len: 50         # T

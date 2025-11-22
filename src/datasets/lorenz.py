@@ -104,7 +104,7 @@ def generate_lorenz(
     task: str = "classification",  # currently only classification really makes sense
     noise: float = 0.0,
     init_box: Sequence[float] = (-1.0, 1.0),
-    multi_label: bool = False,
+    all_times: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
     """
     Generate N samples of Lorenz data, following the setup in the paper.

@@ -35,7 +35,11 @@ def evaluate_classifier(model, loader, device="cpu"):
             xb, yb = xb.to(device), yb.to(device)
 
             logits = model(xb)           # [B, T, C]
-            B, T, C = logits.shape
+            if logits.dim() == 3:
+                B, T, C = logits.shape
+            else:
+                B, C = logits.shape
+                T = 1   
 
             loss = loss_fn(
                 logits.view(B * T, C),   # [B*T, C]
@@ -110,7 +114,12 @@ def train_classifier(
             opt.zero_grad()
 
             logits = model(xb)               # [B, T, C]
-            B, T, C = logits.shape
+            if logits.dim() == 3:
+                B, T, C = logits.shape
+            else:
+                B, C = logits.shape
+                T = 1
+
             loss = loss_fn(
                 logits.view(B * T, C),       # [B*T, C]
                 yb.view(B * T),              # [B*T]
