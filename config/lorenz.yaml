@@ -5,13 +5,13 @@ train: true
 compute_metrics: true
 
 dataset:
-  name: lorenz
+  name: lorenz_long
   all_times: True
   # how many trajectories
   num_samples: 400        # mirror VAR default so runs are comparable
 
-  # time-series length AFTER burn-in
-  seq_len: 50
+  # time-series length
+  seq_len: 500
 
   # integration step for Lorenz ODE
   dt: 0.01
@@ -41,11 +41,10 @@ training:
   batch_size: 32
   epochs: 100
 
-
 experiment:
   tau_max: 25
   num_permutations: 20
-
+  interaction_method: ih
 
 evals:
   loc@k: 5

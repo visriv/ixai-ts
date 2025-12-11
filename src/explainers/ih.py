@@ -1,8 +1,15 @@
 import torch
 import numpy as np
 from typing import Dict, Tuple, Optional, Callable
+from tqdm.auto import tqdm
+# if torch.cuda.is_available():
+#     torch.backends.cuda.sdp_kernel(
+#         enable_flash=False,
+#         enable_mem_efficient=False,
+#         enable_math=True,
+#     )
 
-
+from torch.nn.attention import sdpa_kernel, SDPBackend
 # ------------------------------
 # 1. Scalar output helper
 # ------------------------------
@@ -10,19 +17,29 @@ def _scalar_output(model: torch.nn.Module,
                    x: torch.Tensor,
                    target_idx: Optional[int] = None) -> torch.Tensor:
     """
-    Given input x and a model, return a scalar F(x) to attribute.
-
-    x: [1, ...] tensor
-    If model(x) is [1, C], we either pick target_idx (if given) or argmax.
-    If model(x) is scalar, we just squeeze.
+    x: [B, T, D]
+    Returns a scalar F(x) to attribute.
     """
-    logits = model(x)  # [1, C] or scalar
-    if logits.ndim == 2:
+    logits = model(x)   # e.g. [B, T, C]
+
+    if logits.ndim == 3:
+        # choose class and aggregate over time
+        B, T, C = logits.shape
+        if target_idx is None:
+            # e.g. pick argmax class, then mean over T
+            target_idx = logits.mean(dim=1).argmax(dim=1).item()
+        # scalar: mean over time and batch for that class
+        return logits[..., target_idx].mean()
+
+    elif logits.ndim == 2:
+        # old case: [B, C]
         if target_idx is None:
             target_idx = logits.argmax(dim=1).item()
-        return logits[0, target_idx]
+        return logits[:, target_idx]#.mean()
     else:
+        # already scalar
         return logits.squeeze()
+
 
 
 # ------------------------------
@@ -30,59 +47,56 @@ def _scalar_output(model: torch.nn.Module,
 # ------------------------------
 def integrated_hessians_flat(
     model: torch.nn.Module,
-    x_vec: torch.Tensor,        # [D]
-    baseline_vec: torch.Tensor, # [D]
+    x_mat: torch.Tensor,        # [T, D]
+    baseline_mat: torch.Tensor, # [T, D]
     m_steps: int = 50,
     target_idx: Optional[int] = None,
 ) -> torch.Tensor:
     """
-    Integrated Hessians for a single example with a flattened input.
+    Integrated Hessians for a single time-series example.
 
-    Implements (for features i, j):
-
-        IH_ij(x) = (x_i - x'_i)(x_j - x'_j) * ∫_0^1 H_ij(x' + α (x - x')) dα
-
-    where H_ij is the Hessian of a chosen scalar F wrt input features.
-
-    Returns:
-        IH_flat: [D, D] tensor.
+    We conceptually flatten x ∈ R^{T×D} into a vector of length F = T*D,
+    but we always reshape back to [1, T, D] before calling the model.
     """
     model.eval()
 
-    # Ensure 1D vectors
-    x_vec = x_vec.detach().view(-1)
-    baseline_vec = baseline_vec.detach().view(-1)
-    delta = x_vec - baseline_vec                 # [D]
-    D = delta.shape[0]
+    # Shapes
+    T, D = x_mat.shape
+    device = x_mat.device
 
-    # Predefine f: R^D -> scalar
+    # Flatten to a 1-D coordinate vector for autograd
+    x_vec = x_mat.detach().reshape(-1)          # [F]
+    baseline_vec = baseline_mat.detach().reshape(-1)  # [F]
+    delta = x_vec - baseline_vec                # [F]
+    F = delta.shape[0]
+
+    # f: R^F -> scalar, but internally calls model on [1, T, D]
     def f(z_flat: torch.Tensor) -> torch.Tensor:
         """
-        z_flat: [D]
+        z_flat: [F]
         """
-        # Restore batch dimension so model sees [1, ...F...]
-        z_1 = z_flat.view(1, -1)
-        return _scalar_output(model, z_1, target_idx=target_idx)
+        z_ts = z_flat.view(1, T, D)             # [1, T, D]
+        return _scalar_output(model, z_ts, target_idx=target_idx)
 
     # Integration nodes in (0, 1]; skip α=0 for stability
-    alphas = torch.linspace(0.0, 1.0, steps=m_steps + 1, device=x_vec.device)[1:]
+    alphas = torch.linspace(0.0, 1.0, steps=m_steps + 1, device=device)[1:]
 
-    H_sum = torch.zeros(F, F, device=x_vec.device)
+    H_sum = torch.zeros(F, F, device=device)
 
-    for alpha in alphas:
-        x_alpha = baseline_vec + alpha * delta  # [D]
+    with sdpa_kernel(SDPBackend.MATH):
+        for alpha in alphas:
+            x_alpha = baseline_vec + alpha * delta  # [F]
+            H = torch.autograd.functional.hessian(f, x_alpha)  # [F, F]
+            H_sum += H
 
-        # Full Hessian wrt x_alpha (shape [D, D])
-        H = torch.autograd.functional.hessian(f, x_alpha)  # [D, D]
-        H_sum += H
-
-    H_avg = H_sum / alphas.numel()  # numerical approximation of path integral
+    H_avg = H_sum / alphas.numel()  # approximate ∫_0^1 H(x' + αΔx) dα
 
     # Feature scaling: (Δx_i Δx_j)
-    d = delta.view(-1)                       # [D]
-    IH_flat = H_avg * (d.view(D, 1) * d.view(1, D))  # [D, D]
+    d = delta.view(-1)                              # [F]
+    IH_flat = H_avg * (d.view(F, 1) * d.view(1, F)) # [F, F]
 
     return IH_flat.detach()
+
 
 
 # ------------------------------
@@ -133,21 +147,21 @@ def integrated_hessians_timeseries(
 
     ih_full_list = []  # each element: [T, D, T, D]
 
-    for b in range(B):
-        x_b = x[b].reshape(-1)          # [D]
-        base_b = baseline[b].reshape(-1) # [D]
+    for b in tqdm(range(B), desc="IH over batch"):
+        x_b = x[b]          # [T, D]
+        base_b = baseline[b]  # [T, D]
 
         IH_flat_b = integrated_hessians_flat(
             model=model,
-            x_vec=x_b,
-            baseline_vec=base_b,
+            x_mat=x_b,
+            baseline_mat=base_b,
             m_steps=m_steps,
             target_idx=target_idx,
-        )  # [D, D]
+        )  # [F, F] with F = T*D
 
-        # Reshape to time-series structure [T, D, T, D]
-        IH_ts_b = IH_flat_b.view(T, D, T, D)  # first (t,d), then (t',d2)
+        IH_ts_b = IH_flat_b.view(T, D, T, D)
         ih_full_list.append(IH_ts_b)
+
 
     # Stack over batch: [B, T, D, T, D]
     ih_full_ts = torch.stack(ih_full_list, dim=0)  # [B, T, D, T, D]
@@ -189,7 +203,7 @@ def integrated_hessians_timeseries(
 def ih_main(
     model: torch.nn.Module,
     x: torch.Tensor,                   # [B, T, D]
-    baseline: torch.Tensor,            # [1, T, D] or [B, T, D]
+    baseline: str,         # "mean", [1, T, D] or [B, T, D]
     m_steps: int = 50,
     target_idx: Optional[int] = 0,
 ):
@@ -201,11 +215,11 @@ def ih_main(
         lag_dict_mean   : dict[(tau, d, d2)] -> np.ndarray[B]
         lag_dict_median : dict[(tau, d, d2)] -> np.ndarray[B]
     """
-
+    baseline_tensor = x.mean(dim=0, keepdim=True)  # [1, T, D]
     ih_feat_matrix, ih_full_ts, ih_lag_dict = integrated_hessians_timeseries(
         model,
         x=x,
-        baseline=baseline,
+        baseline=baseline_tensor,
         m_steps=m_steps,
         target_idx=target_idx,   # or whatever class/logit you care about
     )
@@ -216,13 +230,4 @@ def ih_main(
     for (t, d, d2, tau), arr in interactions.items():  # arr: [B]
         agg.setdefault((tau, d, d2), []).append(arr)
 
-    lag_dict_mean: Dict[Tuple[int, int, int], np.ndarray] = {
-        (tau, d, d2): np.mean(np.stack(vals, axis=0), axis=0)  # [B]
-        for (tau, d, d2), vals in agg.items()
-    }
-    lag_dict_median: Dict[Tuple[int, int, int], np.ndarray] = {
-        (tau, d, d2): np.median(np.stack(vals, axis=0), axis=0)  # [B]
-        for (tau, d, d2), vals in agg.items()
-    }
-
-    return lag_dict_mean, lag_dict_median
+    return agg#lag_dict_mean, lag_dict_median

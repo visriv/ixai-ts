@@ -16,3 +16,4 @@ training:
 experiment:
   tau_max: 50
   num_permutations: 50
+  interaction_method: ih

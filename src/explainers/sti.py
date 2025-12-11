@@ -77,7 +77,10 @@ def value_function(
 
     # KL per sample: sum over classes only
     kl = (p * (p.add(1e-9).log() - q.add(1e-9).log())).sum(dim=-1)  # [N]
-    return kl  # keep per-sample, no mean()
+    
+    if kl.dim() == 2:  # [N,T]
+        kl = kl.sum(dim=1)  # [N]
+    return kl  # [N]
 
 
 def random_permutation(U_size: int, rng: np.random.Generator) -> np.ndarray:
@@ -181,12 +184,12 @@ def shapley_taylor_pairwise(
     for (t, d, d2, tau), arr in interactions.items():  # arr: [N]
         agg.setdefault((tau, d, d2), []).append(arr)
 
-    lag_dict_mean: Dict[Tuple[int, int, int], np.ndarray] = {
-        (tau, d, d2): np.mean(np.stack(vals, axis=0), axis=0)  # [N]
-        for (tau, d, d2), vals in agg.items()
-    }
-    lag_dict_median: Dict[Tuple[int, int, int], np.ndarray] = {
-        (tau, d, d2): np.median(np.stack(vals, axis=0), axis=0)  # [N]
-        for (tau, d, d2), vals in agg.items()
-    }
-    return lag_dict_mean, lag_dict_median
+    # lag_dict_mean: Dict[Tuple[int, int, int], np.ndarray] = {
+    #     (tau, d, d2): np.mean(np.stack(vals, axis=0), axis=0)  # [N]
+    #     for (tau, d, d2), vals in agg.items()
+    # }
+    # lag_dict_median: Dict[Tuple[int, int, int], np.ndarray] = {
+    #     (tau, d, d2): np.median(np.stack(vals, axis=0), axis=0)  # [N]
+    #     for (tau, d, d2), vals in agg.items()
+    # }
+    return agg#lag_dict_mean, lag_dict_median

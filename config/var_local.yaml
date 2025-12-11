@@ -4,7 +4,7 @@ train: true
 compute_metrics: true
 
 dataset:
-  name: var_local
+  name: var_local_debug
   all_times: False
 
   num_samples: 400
@@ -26,6 +26,7 @@ training:
 experiment:
   tau_max: 25
   num_permutations: 20
+  interaction_method: ih
 
 evals:
   loc@k: 5

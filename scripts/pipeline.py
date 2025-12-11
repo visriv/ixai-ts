@@ -11,6 +11,8 @@ import numpy as np
 import torch as th
 import pandas as pd
 
+from src.utils.aggregating import get_interaction_curves, aggregate_curve
+
 # Add project root to PYTHONPATH
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
@@ -84,14 +86,14 @@ def load_dataset(ds_cfg):
         from src.datasets.var import generate_var
         X, y, A = generate_var(**params)
 
-    if name == "var_local":
+    if name == "var_local" or name == "var_local_debug":
         from src.datasets.var_planted import generate_var
         X, y, A = generate_var(**params)
     elif name == "arfima":
         from src.datasets.arfima import generate_arfima
         X, y = generate_arfima(**params)
         A = None
-    elif name == "lorenz":
+    elif name == "lorenz" or name == "lorenz_debug" or name == "lorenz_long":
         from src.datasets.lorenz import generate_lorenz
         X, y, A = generate_lorenz(**params)
     else:
@@ -166,11 +168,13 @@ def run_training(cfg, base_outdir):
     print(f"Val size:   {len(y_val)}   | Class balance: {class_stats(y_val)}")
 
     D, _ = X_train.shape[2], len(np.unique(np.concatenate([y_train, y_val])))
-    if cfg["dataset"]["all_times"]:
+    # if cfg["dataset"]["all_times"]:
         # cfg["dataset"]["multi_label"]:
-        C = y_train.shape[1]
-    else:
-        C = len(np.unique(y_train))
+        # pass
+        # C = y_train.shape[1]
+    # else:
+    C = max(2, len(np.unique(y_train)))
+
 
     model = select_model(cfg["model"], D, C, cfg["dataset"]["all_times"])
 
@@ -193,19 +197,19 @@ def run_training(cfg, base_outdir):
 # ---------------------------------
 # Metrics
 # ---------------------------------
-def compute_and_cache_lag_dicts(model, X_tensor, neighborhoods, tau_max, K, baseline, out_dir, device):
-    lag_path_mean, lag_path_median = out_dir / "lag_dict_mean.pkl", out_dir / "lag_dict_median.pkl"
-    if lag_path_mean.exists() and lag_path_median.exists():
-        with open(lag_path_mean, "rb") as f: lag_dict_mean = pickle.load(f)
-        with open(lag_path_median, "rb") as f: lag_dict_median = pickle.load(f)
-        print(f"📂 Loaded cached lag_dicts from {out_dir}")
-        return lag_dict_mean, lag_dict_median
+# def compute_and_cache_lag_dicts(model, X_tensor, neighborhoods, tau_max, K, baseline, out_dir, device):
+#     lag_path_mean, lag_path_median = out_dir / "lag_dict_mean.pkl", out_dir / "lag_dict_median.pkl"
+#     if lag_path_mean.exists() and lag_path_median.exists():
+#         with open(lag_path_mean, "rb") as f: lag_dict_mean = pickle.load(f)
+#         with open(lag_path_median, "rb") as f: lag_dict_median = pickle.load(f)
+#         print(f"📂 Loaded cached lag_dicts from {out_dir}")
+#         return lag_dict_mean, lag_dict_median
 
-    lag_dict_mean, lag_dict_median = shapley_taylor_pairwise(
-        model=model, X=X_tensor, tau_max=tau_max,
-        neighborhoods=neighborhoods, K=K, baseline=baseline,
-        cond_imputer=None, device=device,
-    )
+#     lag_dict_mean, lag_dict_median = shapley_taylor_pairwise(
+#         model=model, X=X_tensor, tau_max=tau_max,
+#         neighborhoods=neighborhoods, K=K, baseline=baseline,
+#         cond_imputer=None, device=device,
+#     )
 
     # lag_dict_mean, lag_dict_median = ih_main(
     #     model=model, x=X_tensor, baseline = np.zeros((1,T,D)), m_steps=50, target_idx=0
@@ -213,21 +217,21 @@ def compute_and_cache_lag_dicts(model, X_tensor, neighborhoods, tau_max, K, base
     
 
 
-    with open(lag_path_mean, "wb") as f: pickle.dump(lag_dict_mean, f)
-    with open(lag_path_median, "wb") as f: pickle.dump(lag_dict_median, f)
-    print(f"✅ Computed and saved lag_dicts to {out_dir}")
-    return lag_dict_mean, lag_dict_median
+    # with open(lag_path_mean, "wb") as f: pickle.dump(lag_dict_mean, f)
+    # with open(lag_path_median, "wb") as f: pickle.dump(lag_dict_median, f)
+    # print(f"✅ Computed and saved lag_dicts to {out_dir}")
+    # return lag_dict_mean, lag_dict_median
 
-def maybe_stack_curves(curve):
-    """
-    Ensure we have both an aggregate 1D curve and (optionally) a 2D stack for 'all' plots.
-    If input is dict->aggregate (1D), return (agg, None).
-    If already 2D [tau+1, N], return (mean over N, full).
-    """
-    if isinstance(curve, np.ndarray) and curve.ndim == 2:
-        agg = curve.mean(axis=1)
-        return agg, curve
-    return curve, None
+# def maybe_stack_curves(curve):
+#     """
+#     Ensure we have both an aggregate 1D curve and (optionally) a 2D stack for 'all' plots.
+#     If input is dict->aggregate (1D), return (agg, None).
+#     If already 2D [tau+1, N], return (mean over N, full).
+#     """
+#     if isinstance(curve, np.ndarray) and curve.ndim == 2:
+#         agg = curve.mean(axis=1)
+#         return agg, curve
+#     return curve, None
 
 def run_metrics(cfg, base_outdir):
     out = make_outdir(base_outdir, cfg, nested=True)
@@ -252,8 +256,9 @@ def run_metrics(cfg, base_outdir):
         X_train, _ = train
 
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
-    D, C = X_train.shape[2], len(np.unique(_))
-    model = select_model(cfg["model"], D, C)
+    D= X_train.shape[2]
+    C = max(2, len(np.unique(_)))
+    model = select_model(cfg["model"], D, C, cfg["dataset"]["all_times"])
     model.load_state_dict(th.load(ckpt_path, map_location="cpu"))
     model.to(device).eval()
 
@@ -261,36 +266,73 @@ def run_metrics(cfg, base_outdir):
     X_t = th.tensor(X_train[:Bcap], dtype=th.float32, device=device)
 
     neighborhoods = {d: [d] for d in range(D)}
-    lag_mean, lag_median = compute_and_cache_lag_dicts(
-        model, X_t, neighborhoods,
-        tau_max=int(cfg["experiment"]["tau_max"]),
-        K=int(cfg["experiment"]["num_permutations"]),
-        baseline="mean", out_dir=out, device=device,
-    )
+    N, T, D = X_t.shape
 
-    curves1 = aggregate_lag_curve(lag_mean, 
-                                  tau_max=int(cfg['experiment']['tau_max']),
-                                   reduce="mean")
-    
-    
-    K = min(cfg["evals"]["loc@k"], len(curves1)-1)
+    interaction_method = cfg["experiment"]["interaction_method"]
+    interaction_curves_path = out / f"interaction_curves_{interaction_method}.pkl"
+
+
+    if interaction_curves_path.exists():
+        with open(interaction_curves_path, "rb") as f:
+            interaction_curves = pickle.load(f)
+        print(f"📂 Loaded cached interaction_curves from {interaction_curves_path}")
+    else:    
+        interaction_curves = get_interaction_curves(
+            interaction_method = cfg["experiment"]["interaction_method"],
+            model=model,
+            X_tensor=X_t,
+            neighborhoods=neighborhoods,
+            tau_max=int(cfg["experiment"]["tau_max"]),
+            K=int(cfg["experiment"]["num_permutations"]),
+            baseline="mean",
+
+            device=device,
+        )
+        with open(interaction_curves_path    , "wb") as f:
+            pickle.dump(interaction_curves, f)
+        print(f"✅ Computed and saved interaction_curves to {interaction_curves_path}")
+
+
+    # 1) aggregate over time T
+    agg_T_curves = aggregate_curve(
+        interaction_curves,
+        axis="T",
+        mode="mean",  # or "mean"
+    )
+    # save
+    with open(out / "agg_T_interaction_curves.pkl", "wb") as f:
+        pickle.dump(agg_T_curves, f)
+
+    # 2) aggregate over tau
+    agg_T_N_curves = aggregate_curve(
+        agg_T_curves,
+        axis="N",
+        mode="mean",  # or "mean"
+    )
+    with open(out / "agg_T_N_interaction_curves.pkl", "wb") as f:
+        pickle.dump(agg_T_N_curves, f)
+
+    #  feature index # TODO
+    curves1 = agg_T_N_curves[:,0,0]
+    curves1_N = agg_T_curves[:,:,0,0]  # [tau, N]
+    K = min(cfg["evals"]["loc@k"], T)
     locK = loc_at_k(curves1, K)
     loc50 = loc_at_50(curves1)
 
     print(f"Loc@{K}: {locK:.4f}")
     print(f"Loc@50: {loc50}")
 
-    agg1, curves1 = maybe_stack_curves(curves1)
+    # agg1, curves1 = maybe_stack_curves(curves1)
 
-    exp_p1, pow_p1 = fit_decay(np.array(curves1))
+    exp_p1, pow_p1 = fit_decay(np.array(curves1_N))
     exp_mean = exp_p1.mean(axis=0)   # shape (2,)
     pow_mean = pow_p1.mean(axis=0)   # shape (2,)
 
-    mag1 = dft_magnitude(agg1)
+    mag1 = dft_magnitude(curves1)
     summary = {
         "exp_fit": {"a": float(exp_mean[0]), "b": float(exp_mean[1])},
         "power_fit": {"a": float(pow_mean[0]), "p": float(pow_mean[1])},
-        "half_range": int(half_range(agg1)),
+        "half_range": int(half_range(curves1)),
         "loc_at_k": locK,
         "loc50": loc50,
         "bandwidth95": int(spectral_bandwidth(mag1, 0.95)),
