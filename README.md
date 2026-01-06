@@ -25,7 +25,7 @@ ixai-ts/
 ### 1. Run All Experiments
 
 ```bash
- python scripts/pipeline.py --config config/var.yaml 
+ python -m scripts.pipeline --config config/var.yaml 
 ```
 This will train models, compute STI metrics, and aggregate results into `runs/all_metrics.csv`.
 
