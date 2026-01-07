@@ -1,18 +1,22 @@
-# in config/var.yaml
+# in config/cltts.yaml
 data_gen: true
 train: true
 compute_metrics: true
 
 dataset:
-  name: var_local
+  name: cltts
   all_times: False
 
   num_samples: 400
-  num_series: 3        # D
   seq_len: 50         # T
-  a1: 0.8     # default
-  noise: 0.1           # default
 
+  window_size: 5
+  autocorr_coeff: 0.5   # ρ
+  cross_coef: 0.8       # γ
+  noise: 0.8            
+  label_mode: "local"
+  # periodic_1: None
+  # periodic_2: None
 
 model:
   name: transformer

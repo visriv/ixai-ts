@@ -30,5 +30,5 @@ class TransformerClassifier(nn.Module):
         if not self.all_times:
             h = h.mean(dim=1)     # [B, d_model]  <-- use aggregate over timestep
         
-        return self.fc(h) # [B, T or 1, C]  <-- per-timestep logits
+        return self.fc(h) # [B | T or 1 | C]  <-- per-timestep logits
 

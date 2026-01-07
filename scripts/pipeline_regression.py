@@ -87,20 +87,8 @@ def load_dataset(ds_cfg):
         from src.datasets.var import generate_var
         X, y, A = generate_var(**params)
 
-    if name == "var_local" or name == "var_local_debug":
-        from src.datasets.var_planted import generate_var
-        X, y, A = generate_var(**params)
-    if name == "cltts" or name == "cltts_debug":
-        from src.datasets.cltts import generate_cltts
-        X, y, A = generate_cltts(**params)
-    elif name == "arfima":
-        from src.datasets.arfima import generate_arfima
-        X, y = generate_arfima(**params)
-        A = None
-    elif name == "lorenz" or name == "lorenz_debug" or name == "lorenz_long":
-        from src.datasets.lorenz import generate_lorenz
-        X, y, A = generate_lorenz(**params)
-    elif name == "ih_multi" or name == "ih_multi_debug":
+    
+    if name == "ih_multi" or name == "ih_multi_debug":
         from src.datasets.ih_multi import generate_ih_multi
         X, y, A = generate_ih_multi(**params)
     else:
@@ -135,9 +123,9 @@ def load_pickles_if_exist(ds_name):
     return None, None, data_dir
 
 
-def class_stats(y):
-    uniq, counts = np.unique(y, return_counts=True)
-    return {int(k): int(v) for k, v in zip(uniq, counts)}
+# def class_stats(y):
+#     uniq, counts = np.unique(y, return_counts=True)
+#     return {int(k): int(v) for k, v in zip(uniq, counts)}
 
 
 # ---------------------------------
@@ -200,6 +188,45 @@ def run_training(cfg, base_outdir):
     with open(out / "history.json", "w") as f: json.dump(history, f, indent=2)
     print(f"✅ Training complete. Saved to {out}")
 
+
+# ---------------------------------
+# Metrics
+# ---------------------------------
+# def compute_and_cache_lag_dicts(model, X_tensor, neighborhoods, tau_max, K, baseline, out_dir, device):
+#     lag_path_mean, lag_path_median = out_dir / "lag_dict_mean.pkl", out_dir / "lag_dict_median.pkl"
+#     if lag_path_mean.exists() and lag_path_median.exists():
+#         with open(lag_path_mean, "rb") as f: lag_dict_mean = pickle.load(f)
+#         with open(lag_path_median, "rb") as f: lag_dict_median = pickle.load(f)
+#         print(f"📂 Loaded cached lag_dicts from {out_dir}")
+#         return lag_dict_mean, lag_dict_median
+
+#     lag_dict_mean, lag_dict_median = shapley_taylor_pairwise(
+#         model=model, X=X_tensor, tau_max=tau_max,
+#         neighborhoods=neighborhoods, K=K, baseline=baseline,
+#         cond_imputer=None, device=device,
+#     )
+
+    # lag_dict_mean, lag_dict_median = ih_main(
+    #     model=model, x=X_tensor, baseline = np.zeros((1,T,D)), m_steps=50, target_idx=0
+    #     ) 
+    
+
+
+    # with open(lag_path_mean, "wb") as f: pickle.dump(lag_dict_mean, f)
+    # with open(lag_path_median, "wb") as f: pickle.dump(lag_dict_median, f)
+    # print(f"✅ Computed and saved lag_dicts to {out_dir}")
+    # return lag_dict_mean, lag_dict_median
+
+# def maybe_stack_curves(curve):
+#     """
+#     Ensure we have both an aggregate 1D curve and (optionally) a 2D stack for 'all' plots.
+#     If input is dict->aggregate (1D), return (agg, None).
+#     If already 2D [tau+1, N], return (mean over N, full).
+#     """
+#     if isinstance(curve, np.ndarray) and curve.ndim == 2:
+#         agg = curve.mean(axis=1)
+#         return agg, curve
+#     return curve, None
 
 def run_metrics(cfg, base_outdir):
     out = make_outdir(base_outdir, cfg, nested=True)

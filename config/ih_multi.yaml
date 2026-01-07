@@ -1,18 +1,19 @@
-# in config/var.yaml
+# in config/ih_multi.yaml
 data_gen: true
 train: true
-compute_metrics: true
+compute_metrics: False
 
 dataset:
-  name: var_local
+  name: ih_multi
   all_times: False
-
   num_samples: 400
-  num_series: 3        # D
   seq_len: 50         # T
-  a1: 0.8     # default
-  noise: 0.1           # default
-
+  num_features: 5    # D
+  num_interactions: 1 # M
+  noise: 0.05          
+  label_mode: "local"
+  # periodic_1: None
+  # periodic_2: None
 
 model:
   name: transformer
