@@ -5,7 +5,7 @@ Interaction based eXplainable AI for Time Series (ixai-ts).
 This repository contains code for:
 - Synthetic dataset generation (VAR, ARFIMA, Lorenz, etc.)
 - Training baseline models (TCN, LSTM, Transformer) on synthetic time series (classification and regression)
-- Computing interaction-based explanations using **Shapley–Taylor Interaction (STI)** #TODO: add more methods
+- Computing interaction-based explanations using [**Shapley–Taylor Interaction (STI), Shapley–Interaction Index Interaction (SII),  Integrated Hessians (IH)**, #TODO: add more methods
 - Metrics and plots for locality of interaction strength and its spectrum
 - Experiment sweeps defined in config/var.yaml
 
@@ -25,7 +25,7 @@ ixai-ts/
 ### 1. Run All Experiments
 
 ```bash
- python scripts/pipeline.py --config config/var.yaml 
+ python -m scripts.pipeline --config config/var.yaml 
 ```
 This will train models, compute STI metrics, and aggregate results into `runs/all_metrics.csv`.
 
