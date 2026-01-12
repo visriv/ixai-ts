@@ -1,7 +1,8 @@
 # in config/var.yaml
 data_gen: true
 train: true
-compute_metrics: true
+pointwise_xai: false
+pairwise_xai: false
 
 dataset:
   name: var_local
@@ -31,6 +32,42 @@ experiment:
 evals:
   loc@k: 5
 
+# ============================
+# Pointwise XAI (first-order)
+# ============================
+pointwise:
+  explainers:
+    - name: ig
+      params:
+        baseline: zero
+        steps: 50
+
+    # - name: deeplift
+    #   params:
+    #     baseline: zero
+    
+    - name: svs
+      params:
+        n_samples: 200
+        baseline: zero
+
+    - name: gradshap
+      params:
+        n_samples: 200
+        # baseline: zero
+
+  perturbation:
+    baseline: zero
+    k_max: 200
+    mode: timepoint              # timepoint | window
+    window_size: 1
+
+  output:
+    target: label                # label | pred
+    score: logit                 # logit | prob
+# ============================
+
+
 sweeps:
   VAR-1:                     # Baseline
     a1: [0.8]
@@ -48,7 +85,7 @@ sweeps:
 
   VAR-5:                     # Model comparison
     model.name: [
-                #  tcn,
-                #  lstm, 
+                 tcn,
+                 lstm, 
                  transformer
                  ]

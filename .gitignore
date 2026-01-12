@@ -5,6 +5,7 @@ output/
 outputs/
 plots/
 data/
+runs/
 .ipynb_checkpoints/
 __pycache__/
 experiment_results/
@@ -25,7 +26,6 @@ dynamask/winit_paper_results/
 .idea/
 winit.egg-info/
 *.pyc
-# Python bytecode
 __pycache__/
 *.py[cod]
 *$py.class

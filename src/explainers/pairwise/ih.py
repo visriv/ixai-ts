@@ -230,4 +230,4 @@ def ih_main(
     for (t, d, d2, tau), arr in interactions.items():  # arr: [B]
         agg.setdefault((tau, d, d2), []).append(arr)
 
-    return agg#lag_dict_mean, lag_dict_median
+    return agg

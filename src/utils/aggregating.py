@@ -1,8 +1,8 @@
 import pickle
 import numpy as np
 
-from src.explainers.sti import shapley_taylor_pairwise
-from src.explainers.ih import ih_main   
+from src.explainers.pairwise.sti import shapley_taylor_pairwise
+from src.explainers.pairwise.ih import ih_main   
 def get_interaction_curves(
     interaction_method, 
     model,

@@ -16,18 +16,20 @@ from src.utils.aggregating import get_interaction_curves, aggregate_curve
 # Add project root to PYTHONPATH
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from src.utils.config import load_config, make_outdir
 from src.models.tcn import TCNClassifier
 from src.models.lstm import LSTMClassifier
 from src.models.transformer import TransformerClassifier
 from src.models.utils import make_loader, train_classifier
-from src.explainers.sti import shapley_taylor_pairwise
-from src.explainers.ih import ih_main
+from src.explainers.pairwise.sti import shapley_taylor_pairwise
+from src.explainers.pairwise.ih import ih_main
 from src.metrics.locality import aggregate_lag_curve, fit_decay, half_range, loc_at_k, loc_at_50
 from src.metrics.spectral import dft_magnitude, spectral_bandwidth, spectral_centroid, spectral_flatness
+from src.metrics.pairwise_metrics import compute_pairwise_metrics
+from src.metrics.pointwise_metrics import compute_pointwise_metrics
 from src.utils.plotting import plot_locality, plot_spectrum
 from src.utils.plot_samples import plot_sample_timeseries
-
+from src.utils.loading import load_pickles_if_exist, load_dataset
+from src.utils.config import load_config, make_outdir
 
 # ---------------------------------
 # Pretty printing
@@ -77,37 +79,6 @@ def expand_cfg(cfg):
     return configs
 
 
-# ---------------------------------
-# Dataset utils
-# ---------------------------------
-def load_dataset(ds_cfg):
-    name = ds_cfg["name"].lower()
-    params = {k: v for k, v in ds_cfg.items() if k != "name"}
-    if name == "var":
-        from src.datasets.var import generate_var
-        X, y, A = generate_var(**params)
-
-    if name == "var_local" or name == "var_local_debug":
-        from src.datasets.var_planted import generate_var
-        X, y, A = generate_var(**params)
-    if name == "cltts" or name == "cltts_debug":
-        from src.datasets.cltts import generate_cltts
-        X, y, A = generate_cltts(**params)
-    elif name == "arfima":
-        from src.datasets.arfima import generate_arfima
-        X, y = generate_arfima(**params)
-        A = None
-    elif name == "lorenz" or name == "lorenz_debug" or name == "lorenz_long":
-        from src.datasets.lorenz import generate_lorenz
-        X, y, A = generate_lorenz(**params)
-    elif name == "ih_multi" or name == "ih_multi_debug":
-        from src.datasets.ih_multi import generate_ih_multi
-        X, y, A = generate_ih_multi(**params)
-    else:
-        raise ValueError(f"Unknown dataset: {name}")
-    return X, y, A, name
-
-
 def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
     n = len(X)
     split = int(split_ratio * n)
@@ -123,21 +94,17 @@ def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
     return (X_train, y_train), (X_val, y_val), data_dir
 
 
-def load_pickles_if_exist(ds_name):
-    data_dir = Path("data") / ds_name
-    train_p, val_p = data_dir / "train.pkl", data_dir / "val.pkl"
-    if train_p.exists() and val_p.exists():
-        with open(train_p, "rb") as f:
-            tr = pickle.load(f)
-        with open(val_p, "rb") as f:
-            va = pickle.load(f)
-        return (tr["X"], tr["y"]), (va["X"], va["y"]), data_dir
-    return None, None, data_dir
+
 
 
 def class_stats(y):
     uniq, counts = np.unique(y, return_counts=True)
     return {int(k): int(v) for k, v in zip(uniq, counts)}
+
+
+
+
+
 
 
 # ---------------------------------
@@ -182,7 +149,6 @@ def run_training(cfg, base_outdir):
     # else:
     C = max(2, len(np.unique(y_train)))
 
-
     model = select_model(cfg["model"], D, C, cfg["dataset"]["all_times"])
 
     train_loader = make_loader(X_train, y_train, batch=cfg["training"]["batch_size"], shuffle=True)
@@ -201,7 +167,7 @@ def run_training(cfg, base_outdir):
     print(f"✅ Training complete. Saved to {out}")
 
 
-def run_metrics(cfg, base_outdir):
+def run_pairwise_xai(cfg, base_outdir):
     out = make_outdir(base_outdir, cfg, nested=True)
     # print(out)
     metrics_file = out / "metrics1.json"
@@ -224,7 +190,7 @@ def run_metrics(cfg, base_outdir):
         X_train, _ = train
 
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
-    D= X_train.shape[2]
+    D = X_train.shape[2]
     C = max(2, len(np.unique(_)))
     model = select_model(cfg["model"], D, C, cfg["dataset"]["all_times"])
     model.load_state_dict(th.load(ckpt_path, map_location="cpu"))
@@ -311,6 +277,16 @@ def run_metrics(cfg, base_outdir):
     print(f"✅ Metrics saved to {metrics_file}")
 
 
+    compute_pairwise_metrics(out, cfg)
+
+
+
+def run_pointwise_xai(cfg, base_outdir):
+    compute_pointwise_metrics(cfg, base_outdir)
+    
+
+
+
 # ---------------------------------
 # Aggregation
 # ---------------------------------
@@ -344,21 +320,25 @@ def main(cfg_path, base_outdir):
 
     data_gen_flag = bool(cfg.get("data_gen", False))
     train_flag = bool(cfg.get("train", True))
-    metrics_flag = bool(cfg.get("compute_metrics", True))
+    pointwise_xai_flag = bool(cfg.get("pointwise_xai", True))
+    pairwise_xai_flag = bool(cfg.get("pairwise_xai", True))
 
     for i, this_cfg in enumerate(all_cfgs):
         banner(f"Running sweep {i+1}/{len(all_cfgs)} → {this_cfg}")
         if data_gen_flag:
             X, y, A, ds_name = load_dataset(this_cfg["dataset"])
             plot_sample_timeseries(X, ds_name, sample_idx=0)
-            save_train_val_pickles(X, y, ds_name)
+            (X_train, y_train), (X_val, y_val), data_dir = \
+                save_train_val_pickles(X, y, ds_name)
             print(f"📦 Data generated for {ds_name}")
         if train_flag:
             run_training(this_cfg, base_outdir)
-        if metrics_flag:
-            run_metrics(this_cfg, base_outdir)
+        if pointwise_xai_flag:
+            run_pointwise_xai(this_cfg, base_outdir)
+        if pairwise_xai_flag:
+            run_pairwise_xai(this_cfg, base_outdir)
 
-    if metrics_flag:
+    if pairwise_xai_flag:
         aggregate_all_metrics(base_outdir)
 
 

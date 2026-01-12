@@ -1,10 +1,10 @@
 # src/utils/plot_samples.py
-
 from pathlib import Path
 from typing import Optional
-
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+import torch
 
 
 def plot_sample_timeseries(
@@ -94,3 +94,110 @@ def plot_sample_timeseries(
     plt.close(fig)
 
     return out_path
+
+
+
+
+def _to_numpy(x):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    return x
+
+
+def plot_explainer_samples(
+    X,
+    y,
+    attributions,
+    expl_name,
+    expl_dir,
+    num_samples: int = 5,
+):
+    """
+    Save visualizations for a few samples under expl_dir/plots/.
+
+    Parameters
+    ----------
+    X : array-like (N, T, D)
+    y : array-like (N,)
+    attributions : array-like (N, T, D)
+    expl_name : str
+    expl_dir : str
+    num_samples : int
+    """
+
+    X = _to_numpy(X)
+    y = _to_numpy(y)
+    attributions = _to_numpy(attributions)
+
+    plots_dir = os.path.join(expl_dir, "plots")
+    os.makedirs(plots_dir, exist_ok=True)
+
+    N, T, D = X.shape
+    num_samples = min(num_samples, N)
+
+    # evenly spaced samples
+    sample_ids = np.linspace(0, N - 1, num_samples, dtype=int)
+
+    # shared attribution color scale (important!)
+    vmax = np.percentile(np.abs(attributions), 99)
+    vmin = -vmax
+
+    for idx, sid in enumerate(sample_ids):
+
+        fig, axes = plt.subplots(
+            3,
+            1,
+            figsize=(14, 7),
+            dpi=180,
+            sharex=True,
+        )
+
+        ax_signal, ax_label, ax_attr = axes
+
+        # ------------------ 1) Raw Signal ------------------
+        ax_signal.imshow(
+            X[sid].T,
+            aspect="auto",
+            cmap="Greys",
+            interpolation="nearest",
+        )
+        ax_signal.set_title(f"Signal (sample {sid})")
+        ax_signal.set_ylabel("Features")
+        ax_signal.grid(alpha=0.25)
+
+        # ------------------ 2) Label ------------------
+        label_row = np.ones((1, T)) * y[sid]
+        ax_label.imshow(
+            label_row,
+            aspect="auto",
+            cmap="Greens",
+            vmin=0,
+            vmax=1,
+        )
+        ax_label.set_yticks([])
+        ax_label.set_title(f"Label = {y[sid]}")
+        ax_label.grid(alpha=0.25)
+
+        # ------------------ 3) Attribution ------------------
+        im = ax_attr.imshow(
+            attributions[sid].T,
+            aspect="auto",
+            cmap="RdBu_r",   # diverging = much better for attribution
+            vmin=vmin,
+            vmax=vmax,
+            interpolation="nearest",
+        )
+        ax_attr.set_title(f"{expl_name} Attribution")
+        ax_attr.set_ylabel("Features")
+        ax_attr.set_xlabel("Time")
+        ax_attr.grid(alpha=0.25)
+
+        # colorbar
+        cbar = plt.colorbar(im, ax=ax_attr, fraction=0.015, pad=0.02)
+        cbar.set_label("Attribution")
+
+        plt.tight_layout()
+
+        out_path = os.path.join(plots_dir, f"{expl_name}_sample_{idx}.png")
+        plt.savefig(out_path, dpi=200, bbox_inches="tight")
+        plt.close()

@@ -1,6 +1,6 @@
 import numpy as np
 
-from var_utils import A_local, A_nonlocal, A_mixed, A_community, make_labels
+from .var_utils import A_local, A_nonlocal, A_mixed, A_community, make_labels
 
 # ground-truth plant registry
 PREDEFINED = {
