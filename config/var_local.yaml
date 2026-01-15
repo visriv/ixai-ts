@@ -13,21 +13,25 @@ dataset:
   seq_len: 50         # T
   a1: 0.8     # default
   noise: 0.1           # default
+  split_ratio: 0.8
 
 
-model:
-  name: transformer
-  d_model: 64
-  layers: 2
+models:
+  - name: transformer
+    d_model: 64
+    layers: 2
+
+  - name: lstm
+    hidden: 64
+    layers: 2
+
 
 training:
   batch_size: 32
   epochs: 100
 
 experiment:
-  tau_max: 25
-  num_permutations: 20
-  interaction_method: ih
+
 
 evals:
   loc@k: 5
@@ -42,9 +46,9 @@ pointwise:
         baseline: zero
         steps: 50
 
-    # - name: deeplift
-    #   params:
-    #     baseline: zero
+    - name: deeplift
+      params:
+        baseline: zero
     
     - name: svs
       params:
@@ -65,27 +69,52 @@ pointwise:
   output:
     target: label                # label | pred
     score: logit                 # logit | prob
+
 # ============================
+# Pairwise XAI (second-order)
+# ============================
+pairwise:
+  batch_size: 32
+  tau_max: 25
+  interaction_method:
+    name: ih
+    params:
+      baseline: zero
+
+
 
 
 sweeps:
-  VAR-1:                     # Baseline
-    a1: [0.8]
-    noise: [0.1]
-    num_permutations: [20]
+  baseline:
+    dataset.a1: [0.8]
+    dataset.noise: [0.1]
+    pairwise.params.num_permutations: [20]
 
-  VAR-2:                     # Stability wrt permutations
-    model.d_model: [16, 32, 64, 128]
+  noise_sweep:
+    sweep:
+      dataset.noise: [0.05, 0.1, 0.2, 0.4]
 
-  VAR-3:                     # Effect of noise
-    noise: [0.05, 0.1, 0.2, 0.4]
+  a1_sweep:
+    dataset.a1: [0.05, 0.1, 0.2, 0.4, 0.8]
 
-  VAR-4:                     # Effect of a1 scale
-    a1: [0.05, 0.1, 0.2, 0.4, 0.8]
+  transformer_width:
+    when:
+      model.name: transformer
+    sweep:
+      model.d_model: [8, 16, 32, 64]
 
-  VAR-5:                     # Model comparison
-    model.name: [
-                 tcn,
-                 lstm, 
-                 transformer
-                 ]
+  lstm_hidden:
+    when:
+      model.name: lstm
+    sweep:
+      model.hidden: [8, 16, 32, 64]
+
+  interaction_method_sweep:
+    sweep:
+      pairwise.interaction_method.name: [ih, sti]
+
+  sti_num_permutations:
+    when:
+      pairwise.interaction_method.name: sti
+    sweep:
+      pairwise.interaction_method.params.num_permutations: [10, 20, 50]

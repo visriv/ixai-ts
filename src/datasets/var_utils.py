@@ -22,27 +22,26 @@ def A_local(D=5, **params):
     np.fill_diagonal(A1, a1)
     return [A1]
 
-def A_nonlocal(D=5, **params):
+def A_nonlocal(D=3, **params):
     """
     params:
-        a10: scalar coeff for the edge at lag 10 (default 0.7)
-        a13: scalar coeff for the edge at lag 13 (default 0.6)
-        edge10: tuple (to_idx, from_idx) for the lag-10 edge (default (1,3))
-        edge13: tuple (to_idx, from_idx) for the lag-13 edge (default (2,4))
+        a9: scalar coeff for the edge at lag 9 (default 0.7)
+        a10: scalar coeff for the edge at lag 10 (default 0.6)
+        edge9: tuple (to_idx, from_idx) for the lag-9 edge (default (0,1))
+        edge10: tuple (to_idx, from_idx) for the lag-10 edge (default (1,2))
     """
-    a10  = _scalar(params, "a10", 0.7)
-    a13  = _scalar(params, "a13", 0.6)
-    i10, j10 = params.get("edge10", (1, 1))
-    i13, j13 = params.get("edge13", (2, 2))
+    a9  = _scalar(params, "a9", 0.7)
+    a10 = _scalar(params, "a10", 0.6)
+    i9, j9 = params.get("edge9", (0, 1))
+    i10, j10 = params.get("edge10", (1, 2))
 
-    A_list = [np.zeros((D, D)) for _ in range(15)]
+    A_list = [np.zeros((D, D)) for _ in range(10)]
+    A9 = np.zeros((D, D))
+    A9[i9, j9] = a9
     A10 = np.zeros((D, D))
     A10[i10, j10] = a10
-    A13 = np.zeros((D, D))
-    A13[i13, j13] = a13
-
-    A_list[9]  = A10  # lag 10
-    A_list[12] = A13  # lag 13
+    A_list[9]  = A9   # lag 9
+    A_list[10] = A10  # lag 10
     return A_list
 
 def A_mixed(D=5, **params):

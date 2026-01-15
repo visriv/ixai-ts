@@ -104,16 +104,21 @@ def train_classifier(
 
     history = []
 
-    for ep in range(epochs):
+    epoch_bar = tqdm(
+        range(1, epochs + 1),
+        desc=f"[{task_name}] training",
+        dynamic_ncols=True,
+    )
+
+    for ep in epoch_bar:
         model.train()
         losses = []
-        for xb, yb in tqdm(
-            train_loader, desc=f"[{task_name}] train ep {ep+1}/{epochs}"
-        ):
+
+        for xb, yb in train_loader:   # ← no tqdm here
             xb, yb = xb.to(device), yb.to(device)
             opt.zero_grad()
 
-            logits = model(xb)               # [B, T, C]
+            logits = model(xb)
             if logits.dim() == 3:
                 B, T, C = logits.shape
             else:
@@ -121,20 +126,22 @@ def train_classifier(
                 T = 1
 
             loss = loss_fn(
-                logits.view(B * T, C),       # [B*T, C]
-                yb.view(B * T),              # [B*T]
+                logits.view(B * T, C),
+                yb.view(B * T),
             )
             loss.backward()
             opt.step()
             losses.append(loss.item())
 
-        train_loss = np.mean(losses)
-        log = {"epoch": ep + 1, "train_loss": round(train_loss, 4)}
+        train_loss = float(np.mean(losses))
+        log = {
+            "epoch": ep,
+            "train_loss": round(train_loss, 4),
+        }
 
-        # --- Validation ---
+        # ---------- validation ----------
         if val_loader is not None:
             metrics = evaluate_classifier(model, val_loader, device=device)
-            # round all float metrics to 4 decimals
             metrics = {
                 k: round(v, 4) if isinstance(v, (float, np.floating)) else v
                 for k, v in metrics.items()
@@ -142,6 +149,16 @@ def train_classifier(
             log.update(metrics)
 
         history.append(log)
-        print(f"Epoch {ep+1}: {log}")
+
+        # ---------- UPDATE BAR IN PLACE ----------
+        epoch_bar.set_postfix({
+            "loss": f"{log['train_loss']:.4f}",
+            "accuracy": log.get("accuracy", "—"),
+            "precision": log.get("precision", "—"),
+            "recall": log.get("recall", "—"),
+            "f1": log.get("f1", "—"),
+            "auroc": log.get("auroc", "—"),
+            "auprc": log.get("auprc", "—"),
+        })
 
     return model, history

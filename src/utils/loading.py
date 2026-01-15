@@ -18,6 +18,22 @@ def select_model(cfg_model, D, C, all_times=False):
         return TransformerClassifier(D, C, d_model=int(cfg_model.get("d_model", 64)), all_times=all_times)
 
 
+def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
+    n = len(X)
+    split = int(split_ratio * n)
+    X_train, y_train = X[:split], y[:split]
+    X_val, y_val = X[split:], y[split:]
+
+    data_dir = Path("data") / ds_name
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with open(data_dir / "train.pkl", "wb") as f:
+        pickle.dump({"X": X_train, "y": y_train}, f)
+    with open(data_dir / "val.pkl", "wb") as f:
+        pickle.dump({"X": X_val, "y": y_val}, f)
+    return (X_train, y_train), (X_val, y_val), data_dir
+
+
+
 
 # ---------------------------------
 # Dataset utils
@@ -29,7 +45,7 @@ def load_dataset(ds_cfg):
         from src.datasets.var import generate_var
         X, y, A = generate_var(**params)
 
-    elif name == "var_local" or name == "var_local_debug":
+    elif name == "var_local" or name == "var_local_debug" or name == "var_nonlocal" :
         from src.datasets.var_planted import generate_var
         X, y, A = generate_var(**params)
     elif name == "cltts" or name == "cltts_debug":

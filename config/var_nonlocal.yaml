@@ -1,19 +1,131 @@
-dataset:
-  name: VAR_NONLOCAL
-  seq_len: 300
-  noise: 0.1
-  D: 5
+# in config/var_nonlocal.yaml
+data_gen: true
+train: true
+pointwise_xai: false
+pairwise_xai: false
 
-model:
-  name: TCN
-  kernel_size: 3
-  layers: 2
+dataset:
+  name: var_nonlocal
+  all_times: False
+
+  num_samples: 400
+  num_series: 3        # D
+  seq_len: 50         # T
+  noise: 0.1           # default
+  split_ratio: 0.8
+  a9: 0.8
+  a10: 0.75
+  edge9: [0, 1]
+  edge10: [1, 2]
+
+models:
+  - name: transformer
+    d_model: 64
+    layers: 2
+
+  - name: lstm
+    hidden: 64
+    layers: 2
+
 
 training:
-  epochs: 3
   batch_size: 32
+  epochs: 100
 
 experiment:
-  tau_max: 50
-  num_permutations: 50
-  interaction_method: ih
+
+
+evals:
+  loc@k: 5
+
+# ============================
+# Pointwise XAI (first-order)
+# ============================
+pointwise:
+  explainers:
+    - name: ig
+      params:
+        baseline: zero
+        steps: 50
+
+    - name: deeplift
+      params:
+        baseline: zero
+    
+    - name: svs
+      params:
+        n_samples: 200
+        baseline: zero
+
+    - name: gradshap
+      params:
+        n_samples: 200
+        # baseline: zero
+
+  perturbation:
+    baseline: zero
+    k_max: 200
+    mode: timepoint              # timepoint | window
+    window_size: 1
+
+  output:
+    target: label                # label | pred
+    score: logit                 # logit | prob
+
+# ============================
+# Pairwise XAI (second-order)
+# ============================
+
+
+pairwise:
+  batch_size: 32
+  tau_max: 25
+  interaction_method:
+    name: ih
+    params:
+      baseline: zero
+
+
+
+    # - name: sti
+    #   params:
+    #     baseline: zero
+    #     num_permutations: 20
+
+
+
+sweeps:
+  baseline:
+    dataset.noise: [0.1]
+
+  noise_sweep:
+    sweep:
+      dataset.noise: [0.05, 0.1, 0.2, 0.4]
+
+  a9_sweep:
+    dataset.a9: [0.5, 0.6, 0.7, 0.8]
+
+  # a10_sweep:
+  #   dataset.a10: [0.5, 0.6, 0.7, 0.8]
+
+  transformer_width:
+    when:
+      model.name: transformer
+    sweep:
+      model.d_model: [8, 16, 32, 64]
+
+  lstm_hidden:
+    when:
+      model.name: lstm
+    sweep:
+      model.hidden: [8, 16, 32, 64]
+
+  interaction_method_sweep:
+    sweep:
+      pairwise.interaction_method.name: [ih, sti]
+
+  sti_num_permutations:
+    when:
+      pairwise.interaction_method.name: sti
+    sweep:
+      pairwise.interaction_method.params.num_permutations: [10, 20, 50]

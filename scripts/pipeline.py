@@ -3,10 +3,11 @@ import argparse
 import json
 import os
 import pickle
+from pyexpat import model
 import sys
 from itertools import product
 from pathlib import Path
-
+from copy import deepcopy
 import numpy as np
 import torch as th
 import pandas as pd
@@ -19,7 +20,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 from src.models.tcn import TCNClassifier
 from src.models.lstm import LSTMClassifier
 from src.models.transformer import TransformerClassifier
-from src.models.utils import make_loader, train_classifier
+from src.models.utils import make_loader, train_classifier, evaluate_classifier
 from src.explainers.pairwise.sti import shapley_taylor_pairwise
 from src.explainers.pairwise.ih import ih_main
 from src.metrics.locality import aggregate_lag_curve, fit_decay, half_range, loc_at_k, loc_at_50
@@ -28,8 +29,8 @@ from src.metrics.pairwise_metrics import compute_pairwise_metrics
 from src.metrics.pointwise_metrics import compute_pointwise_metrics
 from src.utils.plotting import plot_locality, plot_spectrum
 from src.utils.plot_samples import plot_sample_timeseries
-from src.utils.loading import load_pickles_if_exist, load_dataset
-from src.utils.config import load_config, make_outdir
+from src.utils.loading import load_pickles_if_exist, load_dataset, save_train_val_pickles
+from src.utils.config import load_config, make_outdir, expand_cfg
 
 # ---------------------------------
 # Pretty printing
@@ -38,64 +39,6 @@ def banner(msg: str):
     print("\n" + "=" * 80)
     print(f"🔹 {msg}")
     print("=" * 80 + "\n")
-
-
-# ---------------------------------
-# Sweep expansion
-# ---------------------------------
-def expand_cfg(cfg):
-    """Expand config into a list of configs if any param is a list; else [cfg]."""
-    sweep_keys, sweep_vals = [], []
-    for section in ["model", "training", "experiment"]:
-        if section not in cfg:
-            continue
-        for k, v in cfg[section].items():
-            if isinstance(v, list):
-                sweep_keys.append((section, k))
-                sweep_vals.append(v)
-
-    if "sweeps" in cfg and isinstance(cfg["sweeps"], dict):
-        for _, pairs in cfg["sweeps"].items():
-            for keypath, values in pairs.items():
-                if isinstance(values, list):
-                    sect, key = keypath.split(".") if "." in keypath else ("experiment", keypath)
-                    sweep_keys.append((sect, key))
-                    sweep_vals.append(values)
-
-    if not sweep_keys:
-        return [cfg]
-
-    configs = []
-    for combo in product(*sweep_vals):
-        new_cfg = {sec: dict(cfg[sec]) for sec in cfg if isinstance(cfg[sec], dict)}
-        for (sec, k), val in zip(sweep_keys, combo):
-            if sec not in new_cfg:
-                new_cfg[sec] = {}
-            new_cfg[sec][k] = val
-        for key in ["data_gen", "train", "compute_metrics", "sweeps"]:
-            if key in cfg and key not in new_cfg:
-                new_cfg[key] = cfg[key]
-        configs.append(new_cfg)
-    return configs
-
-
-def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
-    n = len(X)
-    split = int(split_ratio * n)
-    X_train, y_train = X[:split], y[:split]
-    X_val, y_val = X[split:], y[split:]
-
-    data_dir = Path("data") / ds_name
-    data_dir.mkdir(parents=True, exist_ok=True)
-    with open(data_dir / "train.pkl", "wb") as f:
-        pickle.dump({"X": X_train, "y": y_train}, f)
-    with open(data_dir / "val.pkl", "wb") as f:
-        pickle.dump({"X": X_val, "y": y_val}, f)
-    return (X_train, y_train), (X_val, y_val), data_dir
-
-
-
-
 
 def class_stats(y):
     uniq, counts = np.unique(y, return_counts=True)
@@ -132,7 +75,7 @@ def run_training(cfg, base_outdir):
     (train, val, _) = load_pickles_if_exist(ds_name)
     if train is None:
         X, y, A, ds_name = load_dataset(cfg["dataset"])
-        (X_train, y_train), (X_val, y_val), _ = save_train_val_pickles(X, y, ds_name)
+        (X_train, y_train), (X_val, y_val), _ = save_train_val_pickles(X, y, ds_name, split_ratio=cfg["dataset"].get("split_ratio", 0.8))
     else:
         X_train, y_train = train
         X_val, y_val = val
@@ -182,27 +125,37 @@ def run_pairwise_xai(cfg, base_outdir):
         return
 
     ds_name = cfg["dataset"]["name"].lower()
-    (train, _, _) = load_pickles_if_exist(ds_name)
-    if train is None:
+    (train, val, _) = load_pickles_if_exist(ds_name)
+    if val is None:
         X, y, A, _ = load_dataset(cfg["dataset"])
-        X_train = X
+        X_val = X
+        y_val = y
     else:
-        X_train, _ = train
+        X_val, y_val = val
 
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
-    D = X_train.shape[2]
+    D = X_val.shape[2]
     C = max(2, len(np.unique(_)))
+    val_loader = make_loader(X_val, y_val, batch=cfg["pairwise"]["batch_size"], shuffle=False)
+
     model = select_model(cfg["model"], D, C, cfg["dataset"]["all_times"])
     model.load_state_dict(th.load(ckpt_path, map_location="cpu"))
     model.to(device).eval()
 
-    Bcap = int(cfg["training"]["batch_size"])
-    X_t = th.tensor(X_train[:Bcap], dtype=th.float32, device=device)
+    metrics = evaluate_classifier(model, val_loader, device=device)
+    metrics = {
+        k: round(v, 4) if isinstance(v, (float, np.floating)) else v
+        for k, v in metrics.items()
+    }
+    print(f"Evaluation metrics: {metrics}")
+
+    Bcap = int(cfg["pairwise"]["batch_size"])
+    X_t = th.tensor(X_val[:Bcap], dtype=th.float32, device=device) # TODO: take only one batche for now
 
     neighborhoods = {d: [d] for d in range(D)}
     N, T, D = X_t.shape
 
-    interaction_method = cfg["experiment"]["interaction_method"]
+    interaction_method = cfg["pairwise"]["interaction_method"]["name"]
     interaction_curves_path = out / f"interaction_curves_{interaction_method}.pkl"
 
 
@@ -212,14 +165,13 @@ def run_pairwise_xai(cfg, base_outdir):
         print(f"📂 Loaded cached interaction_curves from {interaction_curves_path}")
     else:    
         interaction_curves = get_interaction_curves(
-            interaction_method = cfg["experiment"]["interaction_method"],
+            interaction_method = cfg["pairwise"]["interaction_method"]["name"],
             model=model,
             X_tensor=X_t,
             neighborhoods=neighborhoods,
-            tau_max=int(cfg["experiment"]["tau_max"]),
-            K=int(cfg["experiment"]["num_permutations"]),
+            tau_max=int(cfg["pairwise"]["tau_max"]),
+            K = int(cfg["pairwise"]["interaction_method"]["params"].get("num_permutations") or 20),
             baseline="mean",
-
             device=device,
         )
         with open(interaction_curves_path    , "wb") as f:
@@ -246,39 +198,45 @@ def run_pairwise_xai(cfg, base_outdir):
     with open(out / "agg_T_N_interaction_curves.pkl", "wb") as f:
         pickle.dump(agg_T_N_curves, f)
 
-    #  feature index # TODO
-    curves1 = agg_T_N_curves[:,0,0]
-    curves1_N = agg_T_curves[:,:,0,0]  # [tau, N]
-    K = min(cfg["evals"]["loc@k"], T)
-    locK = loc_at_k(curves1, K)
-    loc50 = loc_at_50(curves1)
+    for pair in product(range(D), range(D)):
+        file_suffix = f"feat{pair[0]}_feat{pair[1]}"
 
-    print(f"Loc@{K}: {locK:.4f}")
-    print(f"Loc@50: {loc50}")
+        #  feature index # TODO
+        curves1 = agg_T_N_curves[:,pair[0],pair[1]] # [:, feature_i, feature_j]
+        curves1_N = agg_T_curves[:,:,pair[0],pair[1]]  # [tau, N]
+        K = min(cfg["evals"]["loc@k"], T)
+        locK = loc_at_k(curves1, K)
+        loc50 = loc_at_50(curves1)
 
-    # agg1, curves1 = maybe_stack_curves(curves1)
+        # print(f"Loc@{K}: {locK:.4f}")
+        # print(f"Loc@50: {loc50}")
 
-    exp_p1, pow_p1 = fit_decay(np.array(curves1_N))
-    exp_mean = exp_p1.mean(axis=0)   # shape (2,)
-    pow_mean = pow_p1.mean(axis=0)   # shape (2,)
+        # agg1, curves1 = maybe_stack_curves(curves1)
 
-    mag1 = dft_magnitude(curves1)
-    summary = {
-        "exp_fit": {"a": float(exp_mean[0]), "b": float(exp_mean[1])},
-        "power_fit": {"a": float(pow_mean[0]), "p": float(pow_mean[1])},
-        "half_range": int(half_range(curves1)),
-        "loc_at_k": locK,
-        "loc50": loc50,
-        "bandwidth95": int(spectral_bandwidth(mag1, 0.95)),
-        "spec_centroid": float(spectral_centroid(mag1)),
-        "spec_flatness": float(spectral_flatness(mag1)),
-    }
-    with open(metrics_file, "w") as f: json.dump(summary, f, indent=2)
-    print(f"✅ Metrics saved to {metrics_file}")
+        exp_p1, pow_p1 = fit_decay(np.array(curves1_N))
+        exp_mean = exp_p1.mean(axis=0)   # shape (2,)
+        pow_mean = pow_p1.mean(axis=0)   # shape (2,)
+
+        mag1 = dft_magnitude(curves1)
+        summary = {
+            "pair_id": [int(pair[0]), int(pair[1])],
+            "power_fit": {"a": float(pow_mean[0]), "p": float(pow_mean[1])},
+            "half_range": int(half_range(curves1)),
+            "exp_fit": {"a": float(exp_mean[0]), "b": float(exp_mean[1])},
+            "loc_at_k": locK,
+            "loc50": loc50,
+            "bandwidth95": int(spectral_bandwidth(mag1, 0.95)),
+            "spec_centroid": float(spectral_centroid(mag1)),
+            "spec_flatness": float(spectral_flatness(mag1)),
+        }
+        new_file_name = str(metrics_file).replace(".json", f"{file_suffix}.json")
+        with open(new_file_name, "w") as f: 
+            json.dump(summary, f, indent=2)
+        print(f"✅ Metrics saved to {new_file_name}")
 
 
-    compute_pairwise_metrics(out, cfg)
-
+    # compute_pairwise_metrics(out, cfg) #TODO
+ 
 
 
 def run_pointwise_xai(cfg, base_outdir):
@@ -324,7 +282,10 @@ def main(cfg_path, base_outdir):
     pairwise_xai_flag = bool(cfg.get("pairwise_xai", True))
 
     for i, this_cfg in enumerate(all_cfgs):
-        banner(f"Running sweep {i+1}/{len(all_cfgs)} → {this_cfg}")
+
+        sname = this_cfg.get("_sweep_name", "sweep")
+        banner(f"Run {i+1}/{len(all_cfgs)} [{sname}] → model={this_cfg['model'].get('name','?')} cfg={this_cfg}")
+
         if data_gen_flag:
             X, y, A, ds_name = load_dataset(this_cfg["dataset"])
             plot_sample_timeseries(X, ds_name, sample_idx=0)

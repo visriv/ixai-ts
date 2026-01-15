@@ -10,8 +10,8 @@ def generate_cltts(
     num_samples: int = 400,
     seq_len: int = 50,
     window_size: int = 5,
-    autocorr_coeff: float = 0.5,   # ρ
-    cross_coef: float = 0.8,       # γ
+    cross_coeff: float = 0.8,   # alpha
+    autocorr_coeff: float = 0.5,       # gamma
     noise: float = 1.0,            # scales innovation term
     label_mode: str = "local",
     periodic_1: dict = None,
@@ -72,17 +72,17 @@ def generate_cltts(
 
     # ---- build ground-truth A_list: [p, D, D] ----
     A_list = []
-    rho = float(autocorr_coeff)
-    gamma = float(cross_coef)
+    gamma = float(autocorr_coeff)
+    alpha = float(cross_coeff)
 
     for k in range(W):  # k = 0..W-1 corresponds to lag = k+1
         A = np.zeros((D, D), dtype=float)
         # feature 0 <- feature 0 (self)
-        A[0, 0] = rho * w1[k]
+        A[0, 0] = alpha * w1[k]
         # feature 1 <- feature 0 (cross)
         A[1, 0] = gamma * a[k]
         # feature 1 <- feature 1 (self, downweighted by 1-γ)
-        A[1, 1] = (1.0 - gamma) * rho * w2[k]
+        A[1, 1] = (1.0 - gamma) * alpha * w2[k]
         # feature 0 <- feature 1 is zero
         A_list.append(A)
 
@@ -109,11 +109,11 @@ def generate_cltts(
         for t in range(W, seq_len):
             # feature 0: pure AR with weights w1
             past1 = x1[t - W:t]
-            x1[t] = rho * np.dot(w1, past1) + noise * np.random.randn() * (1.0 - rho)
+            x1[t] = alpha * np.dot(w1, past1) + noise * np.random.randn() * (1.0 - alpha)
 
             # feature 1: base AR with weights w2
             past2 = x2[t - W:t]
-            x2[t] = rho * np.dot(w2, past2) + noise * np.random.randn() * (1.0 - rho)
+            x2[t] = alpha * np.dot(w2, past2) + noise * np.random.randn() * (1.0 - alpha)
 
         # --- add periodic components ---
         s1 = np.zeros(seq_len)

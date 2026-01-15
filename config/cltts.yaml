@@ -1,59 +1,126 @@
 # in config/cltts.yaml
 data_gen: true
 train: true
-pointwise_xai: true
-pairwise_xai: true
+pointwise_xai: false
+pairwise_xai: false
 
 dataset:
   name: cltts
   all_times: False
-
   num_samples: 400
   seq_len: 50         # T
-
   window_size: 5
-  autocorr_coeff: 0.5   # ρ
-  cross_coef: 0.8       # γ
+  autocorr_coeff: 0.5   # gamma
+  cross_coeff: 0.5       # alpha
   noise: 0.8            
   label_mode: "local"
   # periodic_1: None
   # periodic_2: None
 
-model:
-  name: transformer
-  d_model: 64
-  layers: 2
+
+models:
+  - name: transformer
+    d_model: 64
+    layers: 2
+
+  - name: lstm
+    hidden: 64
+    layers: 2
+
 
 training:
   batch_size: 32
   epochs: 100
 
 experiment:
-  tau_max: 25
-  num_permutations: 20
-  interaction_method: sti
+
 
 evals:
   loc@k: 5
 
+# ============================
+# Pointwise XAI (first-order)
+# ============================
+pointwise:
+  explainers:
+    - name: ig
+      params:
+        baseline: zero
+        steps: 50
+
+    - name: deeplift
+      params:
+        baseline: zero
+    
+    - name: svs
+      params:
+        n_samples: 200
+        baseline: zero
+
+    - name: gradshap
+      params:
+        n_samples: 200
+        # baseline: zero
+
+  perturbation:
+    baseline: zero
+    k_max: 200
+    mode: timepoint              # timepoint | window
+    window_size: 1
+
+  output:
+    target: label                # label | pred
+    score: logit                 # logit | prob
+
+# ============================
+# Pairwise XAI (second-order)
+# ============================
+pairwise:
+  batch_size: 32
+  tau_max: 25
+  interaction_method:
+    name: ih
+    params:
+      baseline: zero
+
+
+
+
 sweeps:
-  VAR-1:                     # Baseline
-    a1: [0.8]
-    noise: [0.1]
-    num_permutations: [20]
+  baseline:
+    dataset.noise: [0.1]
+    dataset.cross_coeff: [0.2]
+    dataset.autocorr_coeff: [0.5]
+    pairwise.interaction_method.name: [ih]  
 
-  VAR-2:                     # Stability wrt permutations
-    model.d_model: [16, 32, 64, 128]
+  noise_sweep:
+    sweep:
+      dataset.noise: [0.05, 0.1, 0.2, 0.4]
 
-  VAR-3:                     # Effect of noise
-    noise: [0.05, 0.1, 0.2, 0.4]
+  cross_coeff_sweep:
+    dataset.cross_coeff: [0, 0.2, 0.8]
 
-  VAR-4:                     # Effect of a1 scale
-    a1: [0.05, 0.1, 0.2, 0.4, 0.8]
+  autocorr_coeff_sweep:
+    dataset.autocorr_coeff: [0.5, 0.95]
 
-  VAR-5:                     # Model comparison
-    model.name: [
-                #  tcn,
-                #  lstm, 
-                 transformer
-                 ]
+  transformer_width:
+    when:
+      model.name: transformer
+    sweep:
+      model.d_model: [8, 16, 32]
+
+  lstm_hidden:
+    when:
+      model.name: lstm
+    sweep:
+      model.hidden: [8, 16, 32]
+
+  interaction_method_sweep:
+    sweep:
+      pairwise.interaction_method.name: [ih, sti]
+
+  sti_num_permutations:
+    when:
+      pairwise.interaction_method.name: sti
+    sweep:
+      pairwise.interaction_method.params.num_permutations: [10, 20, 50]

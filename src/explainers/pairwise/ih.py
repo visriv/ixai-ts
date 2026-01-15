@@ -83,12 +83,14 @@ def integrated_hessians_flat(
 
     H_sum = torch.zeros(F, F, device=device)
 
+
     with sdpa_kernel(SDPBackend.MATH):
         for alpha in alphas:
             x_alpha = baseline_vec + alpha * delta  # [F]
-            H = torch.autograd.functional.hessian(f, x_alpha)  # [F, F]
+            with torch.backends.cudnn.flags(enabled=False):
+                H = torch.autograd.functional.hessian(f, x_alpha)
             H_sum += H
-
+    
     H_avg = H_sum / alphas.numel()  # approximate ∫_0^1 H(x' + αΔx) dα
 
     # Feature scaling: (Δx_i Δx_j)
