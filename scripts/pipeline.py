@@ -29,9 +29,9 @@ from src.metrics.pairwise_metrics import compute_pairwise_metrics
 from src.metrics.pointwise_metrics import compute_pointwise_metrics
 from src.utils.plotting import plot_locality, plot_spectrum
 from src.utils.plot_samples import plot_sample_timeseries
-from src.utils.loading import load_pickles_if_exist, load_dataset, save_train_val_pickles
+from src.utils.loading import load_dataset, gen_dataset, save_train_val_pickles
 from src.utils.config import load_config, make_outdir, expand_cfg
-
+from src.datasets.var_utils import gen_Alist
 # ---------------------------------
 # Pretty printing
 # ---------------------------------
@@ -64,18 +64,18 @@ def select_model(cfg_model, D, C, all_times=False):
 
 
 def run_training(cfg, base_outdir):
-    out = make_outdir(base_outdir, cfg, nested=True)
-    ckpt = out / "model.pt"
+    out_train, out_pointxai, out_pairxai = make_outdir(base_outdir, cfg, nested=True)
+    ckpt = out_train / "model.pt"
     if ckpt.exists():
         banner(f"Skipping training — already exists: {ckpt}")
         return
 
-    out.mkdir(parents=True, exist_ok=True)
+    out_train.mkdir(parents=True, exist_ok=True)
     ds_name = cfg["dataset"]["name"].lower()
-    (train, val, _) = load_pickles_if_exist(ds_name)
+    (train, val, A, _) = load_dataset(ds_name)
     if train is None:
-        X, y, A, ds_name = load_dataset(cfg["dataset"])
-        (X_train, y_train), (X_val, y_val), _ = save_train_val_pickles(X, y, ds_name, split_ratio=cfg["dataset"].get("split_ratio", 0.8))
+        X, y, A, ds_name = gen_dataset(cfg["dataset"])
+        (X_train, y_train), (X_val, y_val), _ = save_train_val_pickles(X, y, A, ds_name, split_ratio=cfg["dataset"].get("split_ratio", 0.8))
     else:
         X_train, y_train = train
         X_val, y_val = val
@@ -105,33 +105,38 @@ def run_training(cfg, base_outdir):
     )
 
     th.save(model.state_dict(), ckpt)
-    with open(out / "meta.json", "w") as f: json.dump(cfg, f, indent=2)
-    with open(out / "history.json", "w") as f: json.dump(history, f, indent=2)
-    print(f"✅ Training complete. Saved to {out}")
+    with open(out_train / "meta.json", "w") as f: json.dump(cfg, f, indent=2)
+    with open(out_train / "history.json", "w") as f: json.dump(history, f, indent=2)
+    print(f"✅ Training complete. Saved to {out_train}")
 
 
 def run_pairwise_xai(cfg, base_outdir):
-    out = make_outdir(base_outdir, cfg, nested=True)
+    out_train, out_pointxai, out_pairxai = make_outdir(base_outdir, cfg, nested=True)
     # print(out)
-    metrics_file = out / "metrics1.json"
+    metrics_file = out_pairxai / "metrics1.json"
     # if metrics_file.exists():
     #     banner(f"Skipping metrics — already exists: {metrics_file}")
     #     return
 
-    out.mkdir(parents=True, exist_ok=True)
-    ckpt_path = out / "model.pt"
+    out_pairxai.mkdir(parents=True, exist_ok=True)
+    ckpt_path = out_train / "model.pt"
     if not ckpt_path.exists():
         print(f"❌ No checkpoint at {ckpt_path}, skipping metrics.")
         return
 
     ds_name = cfg["dataset"]["name"].lower()
-    (train, val, _) = load_pickles_if_exist(ds_name)
+    (train, val, A_gt, _) = load_dataset(ds_name)
+    
+
     if val is None:
-        X, y, A, _ = load_dataset(cfg["dataset"])
+        X, y, A_gt, _ = gen_dataset(cfg["dataset"])
         X_val = X
         y_val = y
     else:
         X_val, y_val = val
+
+    if A_gt is None:
+        A_gt = gen_Alist(cfg["dataset"], ds_name)
 
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
     D = X_val.shape[2]
@@ -150,13 +155,13 @@ def run_pairwise_xai(cfg, base_outdir):
     print(f"Evaluation metrics: {metrics}")
 
     Bcap = int(cfg["pairwise"]["batch_size"])
-    X_t = th.tensor(X_val[:Bcap], dtype=th.float32, device=device) # TODO: take only one batche for now
+    X_t = th.tensor(X_val[:Bcap], dtype=th.float32, device=device) # TODO: take only one batch for now
 
-    neighborhoods = {d: [d] for d in range(D)}
+
     N, T, D = X_t.shape
 
     interaction_method = cfg["pairwise"]["interaction_method"]["name"]
-    interaction_curves_path = out / f"interaction_curves_{interaction_method}.pkl"
+    interaction_curves_path = out_pairxai / f"interaction_curves_{interaction_method}.pkl"
 
 
     if interaction_curves_path.exists():
@@ -168,7 +173,6 @@ def run_pairwise_xai(cfg, base_outdir):
             interaction_method = cfg["pairwise"]["interaction_method"]["name"],
             model=model,
             X_tensor=X_t,
-            neighborhoods=neighborhoods,
             tau_max=int(cfg["pairwise"]["tau_max"]),
             K = int(cfg["pairwise"]["interaction_method"]["params"].get("num_permutations") or 20),
             baseline="mean",
@@ -186,27 +190,29 @@ def run_pairwise_xai(cfg, base_outdir):
         mode="mean",  # or "mean"
     )
     # save
-    with open(out / "agg_T_interaction_curves.pkl", "wb") as f:
+    with open(out_pairxai / "agg_T_interaction_curves.pkl", "wb") as f:
         pickle.dump(agg_T_curves, f)
 
-    # 2) aggregate over tau
+    # 2) aggregate over N
     agg_T_N_curves = aggregate_curve(
         agg_T_curves,
         axis="N",
         mode="mean",  # or "mean"
     )
-    with open(out / "agg_T_N_interaction_curves.pkl", "wb") as f:
+    with open(out_pairxai / "agg_T_N_interaction_curves.pkl", "wb") as f:
         pickle.dump(agg_T_N_curves, f)
 
     for pair in product(range(D), range(D)):
         file_suffix = f"feat{pair[0]}_feat{pair[1]}"
+        eps = 1e-9
 
         #  feature index # TODO
-        curves1 = agg_T_N_curves[:,pair[0],pair[1]] # [:, feature_i, feature_j]
+        curves1 = agg_T_N_curves[:,pair[0],pair[1]] # [:, feature_i, feature_j], hence shaped [tau, 1]
+        norm_curves1 = curves1 / (np.abs(curves1).sum() + eps)
         curves1_N = agg_T_curves[:,:,pair[0],pair[1]]  # [tau, N]
         K = min(cfg["evals"]["loc@k"], T)
-        locK = loc_at_k(curves1, K)
-        loc50 = loc_at_50(curves1)
+        locK = loc_at_k(norm_curves1, K)
+        loc50 = loc_at_50(norm_curves1)
 
         # print(f"Loc@{K}: {locK:.4f}")
         # print(f"Loc@50: {loc50}")
@@ -217,11 +223,11 @@ def run_pairwise_xai(cfg, base_outdir):
         exp_mean = exp_p1.mean(axis=0)   # shape (2,)
         pow_mean = pow_p1.mean(axis=0)   # shape (2,)
 
-        mag1 = dft_magnitude(curves1)
+        mag1 = dft_magnitude(norm_curves1)
         summary = {
             "pair_id": [int(pair[0]), int(pair[1])],
             "power_fit": {"a": float(pow_mean[0]), "p": float(pow_mean[1])},
-            "half_range": int(half_range(curves1)),
+            "half_range": int(half_range(norm_curves1)),
             "exp_fit": {"a": float(exp_mean[0]), "b": float(exp_mean[1])},
             "loc_at_k": locK,
             "loc50": loc50,
@@ -235,7 +241,12 @@ def run_pairwise_xai(cfg, base_outdir):
         print(f"✅ Metrics saved to {new_file_name}")
 
 
-    # compute_pairwise_metrics(out, cfg) #TODO
+    compute_pairwise_metrics(
+        I_model=agg_T_N_curves,
+        A_gt=A_gt,
+        cfg=cfg,
+        out_dir=out_pairxai,
+    )
  
 
 
@@ -278,20 +289,20 @@ def main(cfg_path, base_outdir):
 
     data_gen_flag = bool(cfg.get("data_gen", False))
     train_flag = bool(cfg.get("train", True))
-    pointwise_xai_flag = bool(cfg.get("pointwise_xai", True))
-    pairwise_xai_flag = bool(cfg.get("pairwise_xai", True))
+    pointwise_xai_flag = bool(cfg.get("pointwise_xai_flag", True))
+    pairwise_xai_flag = bool(cfg.get("pairwise_xai_flag", True))
 
     for i, this_cfg in enumerate(all_cfgs):
 
         sname = this_cfg.get("_sweep_name", "sweep")
         banner(f"Run {i+1}/{len(all_cfgs)} [{sname}] → model={this_cfg['model'].get('name','?')} cfg={this_cfg}")
 
-        if data_gen_flag:
-            X, y, A, ds_name = load_dataset(this_cfg["dataset"])
-            plot_sample_timeseries(X, ds_name, sample_idx=0)
-            (X_train, y_train), (X_val, y_val), data_dir = \
-                save_train_val_pickles(X, y, ds_name)
-            print(f"📦 Data generated for {ds_name}")
+        # if data_gen_flag:
+        #     X, y, A, ds_name = gen_dataset(this_cfg["dataset"])
+        #     plot_sample_timeseries(X, ds_name, sample_idx=0)
+        #     (X_train, y_train), (X_val, y_val), data_dir = \
+        #         save_train_val_pickles(X, y, A, ds_name)
+        #     print(f"📦 Data generated for {ds_name}")
         if train_flag:
             run_training(this_cfg, base_outdir)
         if pointwise_xai_flag:
@@ -306,6 +317,6 @@ def main(cfg_path, base_outdir):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
-    ap.add_argument("--base_outdir", default="runs")
+    ap.add_argument("--base_outdir", default="runs_new")
     args = ap.parse_args()
     main(args.config, args.base_outdir)

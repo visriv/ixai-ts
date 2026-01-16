@@ -13,10 +13,11 @@ def generate_cltts(
     cross_coeff: float = 0.8,   # alpha
     autocorr_coeff: float = 0.5,       # gamma
     noise: float = 1.0,            # scales innovation term
-    label_mode: str = "local",
+    label_mode: str = "trend_cltts",
     periodic_1: dict = None,
     periodic_2: dict = None,
-    **kwargs
+    trend_window_size: int = 10,
+    **kwargs    
 ):
     """
     CLTTS dataset in the same schema as generate_var.
@@ -25,7 +26,7 @@ def generate_cltts(
     -------
     X_all : [N, T, D]  with D=2  (features: 0 -> driver, 1 -> dependent)
     y_all : [N]        labels per sequence, via make_labels(X_n, label_mode)
-    A_list: list of length p=window_size, each A_k is [2, 2] lag-k coeffs
+    A_list: list of length p=p, each A_k is [2, 2] lag-k coeffs
 
     Dynamics (ignoring sinusoids + noise):
 
@@ -40,10 +41,10 @@ def generate_cltts(
     which we return as A_list[k] = A_{k+1}.
     """
     D = 2
-    W = int(window_size)
-    if W < 1:
-        raise ValueError("window_size must be >= 1")
-    if seq_len <= W:
+    p = int(window_size)
+    if p < 1:
+        raise ValueError("p must be >= 1")
+    if seq_len <= p:
         raise ValueError("seq_len must be > window_size")
     if D != 2:
         raise ValueError("CLTTS is defined for D=2 features")
@@ -56,18 +57,18 @@ def generate_cltts(
         periodic_2 = {4: 0.1, 2: 0.05}
     
     # ---- global lag weights (fixed across samples, like A_list in VAR) ----
-    base = np.exp(-np.arange(W) / W)
+    base = np.exp(-np.arange(p) / p)
     base /= base.sum()
 
     # own AR weights for feature 0 and 1
-    w1_raw = base * np.random.uniform(size=W)
+    w1_raw = base * np.random.uniform(size=p)
     w1 = w1_raw / w1_raw.sum()
 
-    w2_raw = base * np.random.uniform(size=W)
+    w2_raw = base * np.random.uniform(size=p)
     w2 = w2_raw / w2_raw.sum()
 
     # cross weights (feature 0 -> feature 1)
-    a_raw = np.random.uniform(size=W)
+    a_raw = np.random.uniform(size=p)
     a = a_raw / a_raw.sum()
 
     # ---- build ground-truth A_list: [p, D, D] ----
@@ -75,16 +76,17 @@ def generate_cltts(
     gamma = float(autocorr_coeff)
     alpha = float(cross_coeff)
 
-    for k in range(W):  # k = 0..W-1 corresponds to lag = k+1
+    for p_curr in range(p):  # k = 0..W-1 corresponds to lag = k+1
         A = np.zeros((D, D), dtype=float)
         # feature 0 <- feature 0 (self)
-        A[0, 0] = alpha * w1[k]
+        A[0, 0] = alpha * w1[p_curr]
         # feature 1 <- feature 0 (cross)
-        A[1, 0] = gamma * a[k]
+        A[1, 0] = gamma * a[p_curr]
         # feature 1 <- feature 1 (self, downweighted by 1-γ)
-        A[1, 1] = (1.0 - gamma) * alpha * w2[k]
+        A[1, 1] = (1.0 - gamma) * alpha * w2[p_curr]
         # feature 0 <- feature 1 is zero
         A_list.append(A)
+
 
     # ---- simulate sequences ----
     X_all = []
@@ -135,7 +137,7 @@ def generate_cltts(
         X = np.stack([x1, x2], axis=1)  # [T, 2]
 
         # labels: same scheme as VAR-local (mode="local" uses feature 0)
-        y = make_labels(X, mode=label_mode)
+        y = make_labels(X, mode=label_mode, params={"delta": trend_window_size})
 
         X_all.append(X)
         y_all.append(y)

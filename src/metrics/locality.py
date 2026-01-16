@@ -52,6 +52,7 @@ def half_range(curve):
         arr = arr[:, None]  # -> [T, 1]
 
     T, N = arr.shape
+    arr = np.maximum(arr, 0.0) #abs
     res = []
     for n in range(N):
         s = arr[:, n].sum() + 1e-12
@@ -65,6 +66,7 @@ def loc_at_k(curve, K):
     Loc@K: Fraction of interaction mass within first K lags.
     curve: [tau_max+1]  (aggregated interaction values per lag)
     """
+    curve = np.maximum(curve, 0.0)  # clip negatives
     num = curve[:K+1].sum()
     denom = curve.sum() + 1e-12
     return float(num / denom)
@@ -86,6 +88,7 @@ def loc_at_50(curve):
     else:               # [tau]
         agg_curve = arr
 
+    agg_curve = np.maximum(agg_curve, 0.0)  # clip negatives
     total = agg_curve.sum() + 1e-12
     cs = np.cumsum(agg_curve) / total
     # print(cs)

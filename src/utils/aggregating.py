@@ -7,7 +7,6 @@ def get_interaction_curves(
     interaction_method, 
     model,
     X_tensor,
-    neighborhoods,
     tau_max,
     K,
     baseline,
@@ -32,9 +31,9 @@ def get_interaction_curves(
     # If your current version returns lag_dict_mean/median, refactor it so
     # there is an internal function that gives you this "interactions" dict,
     # and call that here.
-
+    N, T, D = X_tensor.shape
     if (interaction_method == "sti"):
-
+        neighborhoods = {d: list(range(D)) for d in range(D)}
         interactions = shapley_taylor_pairwise(
             model=model,
             X=X_tensor,
@@ -50,12 +49,7 @@ def get_interaction_curves(
         interactions = ih_main(
             model=model,
             x=X_tensor,
-            # tau_max=tau_max,
-            # neighborhoods=neighborhoods,
-            # K=K,
             baseline=baseline,
-            # device=device,
-            # return_raw=True,  # <-- you'll add this flag in ih_main
         )
     else:
         raise ValueError(f"Unknown interaction_method '{interaction_method}'")

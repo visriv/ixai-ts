@@ -1,19 +1,20 @@
 # in config/cltts.yaml
 data_gen: true
 train: true
-pointwise_xai: false
-pairwise_xai: false
+pointwise_xai_flag: true
+pairwise_xai_flag: true
 
 dataset:
   name: cltts
   all_times: False
   num_samples: 400
   seq_len: 50         # T
-  window_size: 5
+  window_size: 5 # max_lag
   autocorr_coeff: 0.5   # gamma
   cross_coeff: 0.5       # alpha
   noise: 0.8            
-  label_mode: "local"
+  label_mode: "cltts_trend" # cltts_trend, cltts_mean
+  trend_window_size: 15
   # periodic_1: None
   # periodic_2: None
 
@@ -23,14 +24,14 @@ models:
     d_model: 64
     layers: 2
 
-  - name: lstm
-    hidden: 64
-    layers: 2
+  # - name: lstm
+  #   hidden: 64
+  #   layers: 2
 
 
 training:
   batch_size: 32
-  epochs: 100
+  epochs: 200
 
 experiment:
 
@@ -42,35 +43,12 @@ evals:
 # Pointwise XAI (first-order)
 # ============================
 pointwise:
-  explainers:
-    - name: ig
-      params:
-        baseline: zero
-        steps: 50
-
-    - name: deeplift
-      params:
-        baseline: zero
-    
-    - name: svs
-      params:
-        n_samples: 200
-        baseline: zero
-
-    - name: gradshap
-      params:
-        n_samples: 200
-        # baseline: zero
-
-  perturbation:
-    baseline: zero
-    k_max: 200
-    mode: timepoint              # timepoint | window
-    window_size: 1
-
-  output:
-    target: label                # label | pred
-    score: logit                 # logit | prob
+  explainer:
+    name: ig
+    params:
+      baseline: zero
+      steps: 50
+  
 
 # ============================
 # Pairwise XAI (second-order)
@@ -92,6 +70,8 @@ sweeps:
     dataset.cross_coeff: [0.2]
     dataset.autocorr_coeff: [0.5]
     pairwise.interaction_method.name: [ih]  
+    pointwise_xai.explainer.name: [ig]
+
 
   noise_sweep:
     sweep:
@@ -119,8 +99,12 @@ sweeps:
     sweep:
       pairwise.interaction_method.name: [ih, sti]
 
+  pointwise_xai_sweep:
+    sweep:
+      pointwise.explainer.name: [ig, deeplift, gradshap] #svs
+
   sti_num_permutations:
     when:
       pairwise.interaction_method.name: sti
     sweep:
-      pairwise.interaction_method.params.num_permutations: [10, 20, 50]
+      pairwise.interaction_method.params.num_permutations: [25]

@@ -1,8 +1,8 @@
 # in config/var_nonlocal.yaml
 data_gen: true
 train: true
-pointwise_xai: false
-pairwise_xai: false
+pointwise_xai_flag: true
+pairwise_xai_flag: true
 
 dataset:
   name: var_nonlocal
@@ -23,16 +23,13 @@ models:
     d_model: 64
     layers: 2
 
-  - name: lstm
-    hidden: 64
-    layers: 2
-
+  # - name: lstm
+  #   hidden: 64
+  #   layers: 2
 
 training:
   batch_size: 32
-  epochs: 100
-
-experiment:
+  epochs: 200
 
 
 evals:
@@ -42,41 +39,15 @@ evals:
 # Pointwise XAI (first-order)
 # ============================
 pointwise:
-  explainers:
-    - name: ig
-      params:
-        baseline: zero
-        steps: 50
-
-    - name: deeplift
-      params:
-        baseline: zero
-    
-    - name: svs
-      params:
-        n_samples: 200
-        baseline: zero
-
-    - name: gradshap
-      params:
-        n_samples: 200
-        # baseline: zero
-
-  perturbation:
-    baseline: zero
-    k_max: 200
-    mode: timepoint              # timepoint | window
-    window_size: 1
-
-  output:
-    target: label                # label | pred
-    score: logit                 # logit | prob
+  explainer:
+    name: ig
+    params:
+      baseline: zero
+      steps: 50
 
 # ============================
 # Pairwise XAI (second-order)
 # ============================
-
-
 pairwise:
   batch_size: 32
   tau_max: 25
@@ -85,18 +56,11 @@ pairwise:
     params:
       baseline: zero
 
-
-
-    # - name: sti
-    #   params:
-    #     baseline: zero
-    #     num_permutations: 20
-
-
-
 sweeps:
   baseline:
     dataset.noise: [0.1]
+    pairwise.params.num_permutations: [20]
+    pointwise_xai.explainer.name: [ig]
 
   noise_sweep:
     sweep:
@@ -112,17 +76,21 @@ sweeps:
     when:
       model.name: transformer
     sweep:
-      model.d_model: [8, 16, 32, 64]
+      model.d_model: [8, 16, 32]
 
-  lstm_hidden:
-    when:
-      model.name: lstm
-    sweep:
-      model.hidden: [8, 16, 32, 64]
+  # lstm_hidden:
+  #   when:
+  #     model.name: lstm
+  #   sweep:
+  #     model.hidden: [8, 16, 32]
 
   interaction_method_sweep:
     sweep:
       pairwise.interaction_method.name: [ih, sti]
+
+  pointwise_xai_sweep:
+    sweep:
+      pointwise.explainer.name: [ig, deeplift, gradshap] #svs
 
   sti_num_permutations:
     when:

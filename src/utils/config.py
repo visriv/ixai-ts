@@ -27,7 +27,7 @@ def make_outdir(base_outdir, cfg, nested=True):
         "seed", "device", "log_dir", "outdir", "num_workers",
         "save", "debug", "verbose", "wandb", "mlflow", "all_times",
         "label_mode", "periodic_1", "periodic_2", 
-        "noise", "name"
+        "noise", "name", "baseline"
     }
 
 
@@ -42,6 +42,8 @@ def make_outdir(base_outdir, cfg, nested=True):
         "dataset.num_interactions": "m",
         "dataset.autocorr_coeff": "gamma",
         "dataset.cross_coef": "alpha",
+        "dataset.trend_window_size": "tws",
+        "dataset.label_mode": "lbl",
         # model
         "model.name": "m",
         "model.d_model": "dm",
@@ -55,11 +57,18 @@ def make_outdir(base_outdir, cfg, nested=True):
         "training.lr": "lr",
         "training.weight_decay": "wd",
 
-        # experiment
-        "pairwise.interaction_method": "im",
+
+        # pointwise
+
+        "pointwise.explainer.name": "xai",
+        "pointwise.explainer.params.steps": "steps",
+
+        # pairwise
+        "pairwise.interaction_method.name": "im",
         "pairwise.tau_max": "taumax",
         "pairwise.K": "K",
-        "pairwise.num_permutations": "nperm"
+        "pairwise.batch_size": "bsval",
+        "pairwise.params.num_permutations": "nperm"
     }
 
     # -----------------------------
@@ -114,27 +123,43 @@ def make_outdir(base_outdir, cfg, nested=True):
     model_name = cfg["model"]["name"]
     model_tag = build_tag("model")
     train_tag = build_tag("training")
-    exp_tag   = build_tag("pairwise")
+    pointxai_name = cfg["pointwise"]["explainer"]["name"]
+    pointxai_tag   = build_tag("pointwise")
+    pairwisexai_name = cfg["pairwise"]["interaction_method"]["name"]
+    pairxai_tag   = build_tag("pairwise")
 
     # -----------------------------
     # Final path
     # -----------------------------
 
-    if nested:
-        out = (
-            base_outdir /
-            f"{ds_name}_{ds_tag}" /
-            f"{model_name}_{model_tag}" /
-            train_tag /
-            exp_tag
-        )
-    else:
-        out = base_outdir / "_".join(
-            x for x in [ds_name, ds_tag, model_tag, train_tag, exp_tag] if x
-        )
 
-    out.mkdir(parents=True, exist_ok=True)
-    return out
+    out_train = (
+        base_outdir /
+        f"{ds_name}_{ds_tag}" /
+        f"{model_name}_{model_tag}" /
+        train_tag 
+    )
+
+    out_pointxai = (
+        base_outdir /
+        f"{ds_name}_{ds_tag}" /
+        f"{model_name}_{model_tag}" /
+        train_tag  /  
+        f"{pointxai_name}_{pointxai_tag}"
+    )
+
+    out_pairxai = (
+        base_outdir /
+        f"{ds_name}_{ds_tag}" /
+        f"{model_name}_{model_tag}" /
+        train_tag  /  
+        f"{pairwisexai_name}_{pairxai_tag}"
+    )
+
+    out_train.mkdir(parents=True, exist_ok=True)
+    out_pointxai.mkdir(parents=True, exist_ok=True)
+    out_pairxai.mkdir(parents=True, exist_ok=True)
+    return out_train, out_pointxai, out_pairxai
 
 
 # utils for handing config sweeps and expansions

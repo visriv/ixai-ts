@@ -119,6 +119,12 @@ def coords_to_index(t: int, d: int, D: int) -> int:
 def index_to_coords(idx: int, D: int) -> Tuple[int, int]:
     return idx // D, idx % D
 
+def set_player(mask: th.Tensor, idx: int, D: int, value: bool = True):
+    t = idx // D
+    d = idx % D
+    mask[t, d] = value
+
+
 
 def _coalition_mask_from_indices(indices: np.ndarray, T: int, D: int, device: str) -> th.Tensor:
     """
@@ -209,10 +215,19 @@ def shapley_taylor_pairwise(
                         cutoff = min(pos_u, pos_v)  # predecessors before both (before earlier one)
                         pre = perm[:cutoff]         # numpy array
 
-                        S_T   = _coalition_mask_from_indices(pre,             T, D, device)
-                        S_Tu  = _coalition_mask_from_indices(np.append(pre, u), T, D, device)
-                        S_Tv  = _coalition_mask_from_indices(np.append(pre, v), T, D, device)
-                        S_Tuv = _coalition_mask_from_indices(np.append(pre, [u, v]), T, D, device)
+                        # Build predecessor mask ONCE
+                        S_T = _coalition_mask_from_indices(pre, T, D, device)
+
+                        # Clone and flip bits
+                        S_Tu  = S_T.clone()
+                        S_Tv  = S_T.clone()
+                        S_Tuv = S_T.clone()
+
+                        set_player(S_Tu,  u, D, True)
+                        set_player(S_Tv,  v, D, True)
+                        set_player(S_Tuv, u, D, True)
+                        set_player(S_Tuv, v, D, True)
+
 
                         v_T   = value_function(model, X, S_T,   target=target, target_idx=target_idx,
                                               baseline=baseline, cond_imputer=cond_imputer, output=output, device=device)

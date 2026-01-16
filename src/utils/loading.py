@@ -18,7 +18,7 @@ def select_model(cfg_model, D, C, all_times=False):
         return TransformerClassifier(D, C, d_model=int(cfg_model.get("d_model", 64)), all_times=all_times)
 
 
-def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
+def save_train_val_pickles(X, y, A, ds_name, split_ratio=0.8):
     n = len(X)
     split = int(split_ratio * n)
     X_train, y_train = X[:split], y[:split]
@@ -30,6 +30,8 @@ def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
         pickle.dump({"X": X_train, "y": y_train}, f)
     with open(data_dir / "val.pkl", "wb") as f:
         pickle.dump({"X": X_val, "y": y_val}, f)
+    with open(data_dir / "A.pkl", "wb") as f:
+        pickle.dump({"A": A}, f)
     return (X_train, y_train), (X_val, y_val), data_dir
 
 
@@ -38,7 +40,7 @@ def save_train_val_pickles(X, y, ds_name, split_ratio=0.8):
 # ---------------------------------
 # Dataset utils
 # ---------------------------------
-def load_dataset(ds_cfg):
+def gen_dataset(ds_cfg):
     name = ds_cfg["name"].lower()
     params = {k: v for k, v in ds_cfg.items() if k != "name"}
     if name == "var":
@@ -66,20 +68,23 @@ def load_dataset(ds_cfg):
     return X, y, A, name
 
 
-def load_pickles_if_exist(ds_name):
+def load_dataset(ds_name):
     data_dir = Path("data") / ds_name
     train_p, val_p = data_dir / "train.pkl", data_dir / "val.pkl"
+    A_list_path = data_dir / "A.pkl"
+
     if train_p.exists() and val_p.exists():
         with open(train_p, "rb") as f:
             tr = pickle.load(f)
         with open(val_p, "rb") as f:
             va = pickle.load(f)
-        return (tr["X"], tr["y"]), (va["X"], va["y"]), data_dir
-    return None, None, data_dir
-
-
-
-
+        if A_list_path.exists():
+            with open(A_list_path, "rb") as f:
+                A = pickle.load(f)
+        else:
+            A = None
+        return (tr["X"], tr["y"]), (va["X"], va["y"]), A, data_dir
+    return None, None, None, data_dir
 
 def load_trained_model(cfg, base_outdir):
     """
@@ -93,13 +98,13 @@ def load_trained_model(cfg, base_outdir):
     # --------------------------------------------------
     # Resolve output directory (same logic as training)
     # --------------------------------------------------
-    out = make_outdir(
+    out_train, out_pointxai, out_pairxai = make_outdir(
         base_outdir=base_outdir,
         cfg=cfg,
         nested=True,   # must match training
     )
 
-    ckpt_path = out / "model.pt"
+    ckpt_path = out_train / "model.pt"
     if not ckpt_path.exists():
         raise FileNotFoundError(f"No checkpoint found at {ckpt_path}")
 
@@ -108,7 +113,7 @@ def load_trained_model(cfg, base_outdir):
     # --------------------------------------------------
     ds_name = cfg["dataset"]["name"]
 
-    (train, val, _) = load_pickles_if_exist(ds_name)
+    (train, val, A, _) = load_dataset(ds_name)
 
     if train is not None:
         X_train, y_train = train
@@ -118,7 +123,7 @@ def load_trained_model(cfg, base_outdir):
         X_train, y_train = X, y
 
     D = X_train.shape[-1]
-    C = int(len(np.unique(y_train)))
+    C = max(2, int(len(np.unique(y_train))))
 
     # --------------------------------------------------
     # Reconstruct model architecture
