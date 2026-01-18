@@ -5,7 +5,9 @@ from .base_explainer import BaseExplainer
 class IGExplainer(BaseExplainer):
     name = "IG"
 
-    def __init__(self, model, steps: int = 32, **kwargs):
+    def __init__(self, model,
+                 steps, 
+                 **kwargs):
         super().__init__(model)
         self.steps = steps
     def attribute(self, X):

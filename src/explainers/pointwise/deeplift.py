@@ -13,7 +13,7 @@ class DeepLIFTExplainer(BaseExplainer):
     """
     name = "DeepLift"
 
-    def __init__(self, model, baseline="zero"):
+    def __init__(self, model, baseline="zero", **kwargs):
         """
         Args:
             baseline: "zero" → use zero baseline (default)
@@ -58,7 +58,7 @@ class DeepLIFTExplainer(BaseExplainer):
         device = next(net.parameters()).device
         net.eval()
 
-        X = np.asarray(X, dtype=np.float32)
+        X = X.detach().cpu().numpy().astype(np.float32)
         
         X_tensor = torch.tensor(X, dtype=torch.float32, device=device)
         baselines = self._make_baseline(X)

@@ -168,7 +168,10 @@ def run_pairwise_xai(cfg, base_outdir):
         with open(interaction_curves_path, "rb") as f:
             interaction_curves = pickle.load(f)
         print(f"📂 Loaded cached interaction_curves from {interaction_curves_path}")
-    else:    
+    else:
+        print(f"Cache not found at {interaction_curves_path}")
+        print(f"Computing pairwise XAI using method '{interaction_method}' ...")
+
         interaction_curves = get_interaction_curves(
             interaction_method = cfg["pairwise"]["interaction_method"]["name"],
             model=model,

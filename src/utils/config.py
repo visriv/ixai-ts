@@ -27,7 +27,7 @@ def make_outdir(base_outdir, cfg, nested=True):
         "seed", "device", "log_dir", "outdir", "num_workers",
         "save", "debug", "verbose", "wandb", "mlflow", "all_times",
         "label_mode", "periodic_1", "periodic_2", 
-        "noise", "name", "baseline"
+        "noise", "name", "baseline", "delta" , "k_list"
     }
 
 

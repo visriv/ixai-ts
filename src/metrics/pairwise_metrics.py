@@ -82,8 +82,8 @@ def compute_pairwise_metrics(
 
     eps = 1e-12
     tau_max, D, _ = I_model.shape
-    delta = float(cfg["evals"].get("delta", 0.0))
-    K_loc = int(cfg["evals"].get("loc@k", 1))
+    delta = float(cfg["pairwise"]["evals"].get("delta", 0.0))
+    # K_loc = int(cfg["evals"].get("loc@k", 5))
 
     # --------------------------------------------------
     # Build GT interaction tensor I_true[tau,i,j]
@@ -127,7 +127,7 @@ def compute_pairwise_metrics(
     # (b) INTERACTION–LAG LOCALITY
     # ==================================================
     lag_errors = []
-    locKs = []
+    # locKs = []
 
     for i in range(D):
         for j in range(D):
@@ -137,7 +137,7 @@ def compute_pairwise_metrics(
             if len(true_lags) == 0:
                 continue
 
-            tau_star = true_lags[0]
+            tau_star = true_lags[0] #TODO: only the first entry in true lags (from A matrix)
             curve = np.abs(I_model[:, i, j])
             curve[0] = 0.0
 
@@ -147,10 +147,10 @@ def compute_pairwise_metrics(
 
             p = curve / Z
             lag_errors.append(np.sum(p * np.abs(np.arange(tau_max) - tau_star)))
-            locKs.append(np.sum(p[np.abs(np.arange(tau_max) - tau_star) <= K_loc]))
+            # locKs.append(np.sum(p[np.abs(np.arange(tau_max) - tau_star) <= K_loc]))
 
     lag_error = float(np.mean(lag_errors)) if lag_errors else float("nan")
-    locK_mean = float(np.mean(locKs)) if locKs else float("nan")
+    # locK_mean = float(np.mean(locKs)) if locKs else float("nan")
 
     # ==================================================
     # (c) STRENGTH CALIBRATION
@@ -191,7 +191,7 @@ def compute_pairwise_metrics(
         },
         "lag_locality": {
             "mean_lag_error": lag_error,
-            f"mean_loc@{K_loc}": locK_mean,
+            # f"mean_loc@{K_loc}": locK_mean,
         },
         "strength_calibration": {
             "spearman": spearman,

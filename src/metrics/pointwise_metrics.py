@@ -5,17 +5,22 @@ import torch as th
 from pathlib import Path
 
 from src.explainers.pointwise.utils import load_pointwise_explainer
-from src.metrics.perturbation import (
-    compute_insertion_curve,
-    compute_deletion_curve,
-    compute_AOPC,
-)
+from src.metrics.perturbation import compute_perturbation_curves
 from src.utils.loading import load_dataset, load_trained_model
 from src.utils.config import make_outdir
-from src.utils.plot_samples import plot_explainer_samples
+from src.utils.plot_samples import plot_explainer_samples, plot_hughes_curves, plot_insertion_deletion_curves
+from src.metrics.perturbation import compute_pointwise_metrics_from_curves
+from src.metrics.pert_hugues import compute_hughes_curves, compute_hugues_metrics
+
+
+
+
+
+
+
 
 def compute_pointwise_metrics(cfg, base_outdir):
-    expl_cfg = cfg["pointwise_xai"]["explainer"]
+    expl_cfg = cfg["pointwise"]["explainer"]
     name = expl_cfg["name"]
     params = expl_cfg.get("params", {})
     print(f"➡️  Explainer: {name}")
@@ -96,37 +101,41 @@ def compute_pointwise_metrics(cfg, base_outdir):
             num_samples=cfg["pointwise"].get("num_plot_samples", 5),
         )
     
-    # ---------------------------------------------
-    # 2. Perturbation curves
-    # ---------------------------------------------
-    # ins_curve = compute_insertion_curve(
-    #     model, X_val, y_val, attributions, cfg
-    # )
-    # del_curve = compute_deletion_curve(
-    #     model, X_val, y_val, attributions, cfg
-    # )
-
-    # np.save(expl_dir / f"{name}_insertion.npy", ins_curve)
-    # np.save(expl_dir / f"{name}_deletion.npy", del_curve)
-
-    # ---------------------------------------------
-    # 3. AOPC
-    # ---------------------------------------------
-    # aopc = compute_AOPC(ins_curve, del_curve)
-
-    # results[name] = {
-    #     "AOPC": float(aopc),
-    #     "insertion_final": float(ins_curve[-1]),
-    #     "deletion_final": float(del_curve[-1]),
-    # }
-
-    # -------------------------------------------------
-    # Save metrics
-    # -------------------------------------------------
-    # out_file = out_pointxai / "pointwise_metrics.json"
-    # with open(out_file, "w") as f:
-    #     json.dump(results, f, indent=2)
-
-    # print(f"✅ Pointwise metrics saved to {out_file}")
 
 
+    curves_path = expl_dir / f"{name}_curves.npy"
+    hugues_curves_path = expl_dir / f"{name}_hugues_curves.npy"
+    if curves_path.exists() and hugues_curves_path.exists():
+        print(f"📂 Found cached perturbation curves for {name}, loading...")
+        curves = np.load(curves_path, allow_pickle=True).item()
+        hugues_curves = np.load(hugues_curves_path, allow_pickle=True).item()
+    else:
+        print(f"📊 Computing perturbation curves for {name} ...")
+        model = load_trained_model(cfg, base_outdir)
+        model.eval().to(device)
+        curves = compute_perturbation_curves(model, X_val, y_val, attributions, cfg)
+        hugues_curves = compute_hughes_curves(model, X_val, y_val, attributions, cfg)
+        np.save(expl_dir / f"{name}_curves.npy", curves)
+        np.save(expl_dir / f"{name}_hugues_curves.npy", hugues_curves)
+
+
+    plot_insertion_deletion_curves(
+        curves,
+        expl_name=name,
+        expl_dir=str(expl_dir),
+    )   
+    metrics = compute_pointwise_metrics_from_curves(curves)
+    with open(expl_dir / "pointwise_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
+
+
+    # New set of metrics from Hugues et al.
+
+    plot_hughes_curves(
+        hugues_curves,
+        expl_name=name,
+        expl_dir=str(expl_dir),
+    )   
+    metrics = compute_hugues_metrics(hugues_curves)
+    with open(expl_dir / "pointwise_metrics_hugues.json", "w") as f:
+        json.dump(metrics, f, indent=2)

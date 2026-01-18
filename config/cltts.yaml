@@ -48,7 +48,9 @@ pointwise:
     params:
       baseline: zero
       steps: 50
-  
+  evals:
+    baseline: zero
+    k_list: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 
 # ============================
 # Pairwise XAI (second-order)
@@ -60,6 +62,8 @@ pairwise:
     name: ih
     params:
       baseline: zero
+  evals:
+    delta: 1e-5
 
 
 
@@ -70,7 +74,8 @@ sweeps:
     dataset.cross_coeff: [0.2]
     dataset.autocorr_coeff: [0.5]
     pairwise.interaction_method.name: [ih]  
-    pointwise_xai.explainer.name: [ig]
+    pointwise.explainer.name: [ig]
+    pointwise.explainer.params.steps: [50]
 
 
   noise_sweep:

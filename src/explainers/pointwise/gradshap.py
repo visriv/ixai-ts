@@ -13,6 +13,7 @@ class GradSHAPExplainer(BaseExplainer):
         model,
         n_samples: int = 20,
         stdev: float = 0.0,
+        **kwargs
     ):
         """
         Args:
